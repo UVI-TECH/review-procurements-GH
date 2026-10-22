@@ -1,6 +1,13 @@
 # Instalar los hooks una vez por clon:  uv run pre-commit install
 # La versión de gitleaks (rev) es la misma que usa el job de CI; se lee de aquí.
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Sin protección de ramas en GitHub Free: evita commits directos a main (ver docs/decisiones/0001).
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:
