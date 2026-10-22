@@ -103,4 +103,5 @@ El criterio de aceptación tiene dos partes: una segunda corrida sin cambios no 
 - **Pendientes para la Fase 4:**
   - La cancelación y el latido se muestran en la interfaz.
   - Las revisiones humanas se suman al cálculo del estado.
-  - Se puede editar `cancelacion_solicitada` desde el admin sin pasar por la auditoría: solo lo puede hacer el Administrador, y la Fase 4 lo hará desde su propia vista.
+  - La cancelación se hará desde una vista propia. Mientras tanto, en el admin los campos de cancelación son de solo lectura (también para el superusuario) y la única vía es el comando `cancelar_corrida`, que audita.
+- **Datos de desarrollo:** en desarrollo, `CARPETA_CONTRATACIONES` apunta siempre a una carpeta sintética. Los datos reales solo se procesan en el clon de validación y en el PC de Gestión Humana.
