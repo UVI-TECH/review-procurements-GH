@@ -76,6 +76,8 @@ Lo que quedó permitido y por qué:
 
 Límites conocidos:
 
+- Las negaciones de `respaldos/` van ancladas a la raíz (`./respaldos/**`). Con `**/respaldos/**` el sandbox oculta también el código de `apps/respaldos/`.
+- Dentro del sandbox, `git status` muestra como `??` puntos de montaje que crea el propio sandbox (`.bashrc`, `.gitconfig`, `.idea`, `.claude/agents`…). Haz `git add` con rutas explícitas; nunca `git add -A` ni `git add .`.
 - Una llamada sale del sandbox solo si **todos** sus comandos coinciden con `excludedCommands`. Por eso `gh ... | tail` falla con 401: ejecuta `gh` y `git push` solos, sin pipes, `cd` ni `$(...)`.
 - El sandbox no existe en Windows nativo: allí solo quedan las reglas `deny`. Tampoco aplica a lo que el usuario ejecuta en su propia terminal.
 - Si un comando necesita otra red u otra ruta, avisa qué restricción encontró; ampliar el sandbox lo decide el usuario.

@@ -28,7 +28,7 @@
       "Read(**/*.db-*)",
       "Read(**/*.sqlite3)",
       "Read(**/*.sqlite3-*)",
-      "Read(**/respaldos/**)",
+      "Read(./respaldos/**)",
       "Read(**/*.zip)",
 
       "Bash(*.env)",
@@ -56,7 +56,8 @@
       "Bash(*.db-*)",
       "Bash(*.sqlite3*)",
       "Bash(sqlite3 *)",
-      "Bash(*respaldos/*)",
+      "Bash(* respaldos/*)",
+      "Bash(*./respaldos/*)",
       "Bash(*.zip*)",
       "Bash(unzip *)",
       "Bash(7z *)",
