@@ -10,7 +10,7 @@
 *.db-journal
 *.db-wal
 *.db-shm
-respaldos/
+/respaldos/
 *.zip
 
 # Archivos subidos y estáticos recolectados
