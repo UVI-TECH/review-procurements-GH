@@ -93,6 +93,8 @@ Los grupos los crea la migración `cuentas/0003_roles`. Como en una base nueva l
   - `ver_pdf` en `Documento`.
   - `verificar_profesor` y `exportar_informes` en `Profesor`.
 - El Administrador ve los grupos, pero no los edita, para que los roles no se desvíen de la migración.
+- Sin escalamiento. Un usuario que no es superusuario no otorga `is_superuser` ni permisos sueltos: en el admin esos campos son de solo lectura, así que un POST manual se ignora. Tampoco edita, borra ni cambia la contraseña de una cuenta superusuario. Solo un superusuario gestiona superusuarios.
+- Asignar Administrador o Revisor GH marca `is_staff` automáticamente (señal `m2m_changed` en `cuentas/signals.py`). Quitar el rol no lo desmarca.
 - El Revisor GH no ve la auditoría (incluye inicios fallidos con nombres de usuario intentados) ni los usuarios. El historial de un profesor se mostrará en la Fase 4 desde una vista propia filtrada por objeto.
 - Consulta no tiene `ver_pdf`, `view_analisis` ni `view_revision`. El análisis repite la cédula, el nombre y las observaciones de cada certificado: con `view_analisis` vería casi lo mismo que en el PDF.
 
