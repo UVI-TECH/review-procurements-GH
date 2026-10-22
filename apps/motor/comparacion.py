@@ -89,7 +89,7 @@ def _tipo(catalogo, codigo):
     return tipo.codigo if tipo else "otro"
 
 
-def _motivos_intencionales(evaluacion, documentos, catalogo):
+def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
     motivos = []
     if evaluacion.cedula_ambigua:
         motivos.append("cedula_ambigua")
@@ -107,6 +107,12 @@ def _motivos_intencionales(evaluacion, documentos, catalogo):
         motivos.append("error_de_analisis")
     if evaluacion.ilegibles:
         motivos.append("documento_ilegible")
+    # Estados nuevos donde el legado solo decía INCOMPLETO (ADR 0003, diferencia 4).
+    if estado_legado == "INCOMPLETO":
+        if evaluacion.estado == EstadoProfesor.SIN_DOCUMENTOS:
+            motivos.append("sin_documentos")
+        elif evaluacion.estado == EstadoProfesor.CON_PROBLEMAS:
+            motivos.append("con_problemas")
     return motivos
 
 
@@ -135,12 +141,16 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
     if completo2 != completo3:
         origen.append("reglas")
 
-    difieren_reglas = (completo2, col2["faltantes"], col2["problemas"]) != (
-        completo3,
+    difieren_reglas = (col2["estado"], col2["faltantes"], col2["problemas"]) != (
+        col3["estado"],
         col3["faltantes"],
         col3["problemas"],
     )
-    motivos = _motivos_intencionales(evaluacion, revalidados, catalogo) if difieren_reglas else []
+    motivos = (
+        _motivos_intencionales(evaluacion, revalidados, catalogo, col2["estado"])
+        if difieren_reglas
+        else []
+    )
 
     documentos = []
     for viejo, nuevo in zip(viejos, revalidados, strict=True):

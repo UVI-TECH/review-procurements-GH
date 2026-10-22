@@ -117,7 +117,7 @@ Precisiones:
     | 3 | IA nueva | reglas nuevas |
 
   - La diferencia entre 1 y 2 viene del prompt o del modelo, y se reporta por documento (tipo y `es_valido`).
-  - La diferencia entre 2 y 3 viene de las reglas, y se clasifica con la diferencia intencional que la explica: `duplicados`, `cedula_ambigua`, `otro`, `error_de_analisis` o `documento_ilegible`. Si ninguna la explica, queda en `diferencias_no_explicadas`.
+  - La diferencia entre 2 y 3 viene de las reglas, y se clasifica con la diferencia intencional que la explica: `duplicados`, `cedula_ambigua`, `otro`, `error_de_analisis`, `documento_ilegible`, `sin_documentos` o `con_problemas` (estos dos, cuando el legado decía INCOMPLETO). También cuenta como diferencia de reglas un estado detallado distinto entre las columnas 2 y 3. Si ninguna la explica, queda en `diferencias_no_explicadas`.
   - En pantalla también sale `estado_detallado_difiere`: los profesores cuyo estado detallado es distinto aunque coincida COMPLETO / no COMPLETO (p. ej. INCOMPLETO frente a ERROR).
   - El informe detallado lleva datos reales: se escribe en JSON en `--salida`, y el comando rechaza una ruta dentro del repositorio. En pantalla solo salen conteos.
   - Gasta tokens de los dos motores.

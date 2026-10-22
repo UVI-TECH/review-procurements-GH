@@ -192,6 +192,24 @@ def test_sin_pdfs(legado):
     assert informe["legado"]["estado"] == "INCOMPLETO"
     assert informe["motor_nuevo"]["estado"] == "SIN_DOCUMENTOS"
     assert informe["coincide_estado"]
+    assert informe["diferencias_intencionales"] == ["sin_documentos"]
+    assert informe["diferencias_no_explicadas"] == []
+
+
+def test_con_problemas_frente_a_incompleto_es_intencional(legado):
+    """Un vigente inválido: el legado dice INCOMPLETO y el motor nuevo, CON_PROBLEMAS."""
+    nuevos = completos(
+        certificados_eps_afp=resultado("certificados_eps_afp", valido=False, cedula="")
+    )
+    informe = comparar_profesor(
+        "P", [a_dict_legado(r) for r in nuevos], nuevos, catalogo_inicial(), legado
+    )
+    assert (informe["legado"]["estado"], informe["motor_nuevo"]["estado"]) == (
+        "INCOMPLETO",
+        "CON_PROBLEMAS",
+    )
+    assert informe["diferencias_intencionales"] == ["con_problemas"]
+    assert informe["diferencias_no_explicadas"] == []
 
 
 def test_probar_motor_falla_claro_si_el_pdf_no_existe(settings, tmp_path):
