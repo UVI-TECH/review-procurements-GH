@@ -163,16 +163,21 @@ revision-contrataciones/
 ├── README.md
 ├── pyproject.toml
 ├── uv.lock
+├── .python-version            # 3.12
 ├── .env.example
 ├── .gitignore
-├── .pre-commit-config.yaml
+├── .pre-commit-config.yaml    # gitleaks + ruff
+├── .claude/settings.json      # niega leer .env, bases de datos y respaldos
+├── .github/workflows/ci.yml   # gitleaks, ruff y pruebas (Ubuntu; Windows en PR/main)
 ├── manage.py
 ├── config/
+│   ├── entorno.py             # carga el .env antes de elegir los settings
 │   ├── settings/
 │   │   ├── base.py
 │   │   ├── desarrollo.py      # Fedora, motor simulado
 │   │   ├── produccion.py      # PC de Gestión Humana
-│   │   └── validacion.py      # equipo de John, solo lectura
+│   │   ├── validacion.py      # equipo de John, solo lectura
+│   │   └── pruebas.py         # pytest: motor simulado fijo, SQLite en memoria
 │   ├── urls.py
 │   └── wsgi.py
 ├── apps/
