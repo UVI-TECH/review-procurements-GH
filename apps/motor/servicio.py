@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.management import CommandError
+from django.db import DEFAULT_DB_ALIAS, connections
+from django.db.migrations.executor import MigrationExecutor
 
 from .reglas import evaluar_profesor, revalidar_por_cedula
 
@@ -26,6 +28,19 @@ def exigir_api_real():
         raise CommandError("Este comando no corre con los settings de pruebas.")
     if settings.MOTOR_SIMULADO:
         raise CommandError("Este comando usa la API real: pon MOTOR_SIMULADO=False en el .env.")
+
+
+def hay_migraciones_pendientes():
+    executor = MigrationExecutor(connections[DEFAULT_DB_ALIAS])
+    return bool(executor.migration_plan(executor.loader.graph.leaf_nodes()))
+
+
+def exigir_migraciones():
+    """El catálogo sale de la base de datos: sin migraciones no hay tablas."""
+    if hay_migraciones_pendientes():
+        raise CommandError(
+            "Faltan migraciones en la base de datos. Ejecuta manage.py migrate primero."
+        )
 
 
 def listar_pdfs(carpeta):

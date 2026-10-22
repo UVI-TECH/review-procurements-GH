@@ -154,8 +154,35 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         "ia_nueva_con_reglas_del_legado": col2,
         "motor_nuevo": col3,
         "coincide_estado": completo1 == completo3,
+        # El legado solo tiene COMPLETO, INCOMPLETO y ERROR (fallo de toda la carpeta).
+        "coincide_estado_detallado": col1["estado"] == col3["estado"],
         "origen_diferencia_estado": "_y_".join(origen) or None,
         "diferencias_intencionales": motivos,
         "diferencias_no_explicadas": (["reglas"] if difieren_reglas and not motivos else []),
         "documentos": documentos,
+    }
+
+
+def resumir(informes):
+    """Conteos para la pantalla: sin nombres, cédulas ni rutas."""
+    documentos = [d for i in informes for d in i["documentos"]]
+    return {
+        "profesores": len(informes),
+        "estado_coincide": sum(i["coincide_estado"] for i in informes),
+        "estado_detallado_difiere": sum(not i["coincide_estado_detallado"] for i in informes),
+        "estado_difiere_por_ia": sum(
+            "ia" in (i["origen_diferencia_estado"] or "") for i in informes
+        ),
+        "estado_difiere_por_reglas": sum(
+            "reglas" in (i["origen_diferencia_estado"] or "") for i in informes
+        ),
+        "con_diferencias_intencionales": sum(
+            bool(i["diferencias_intencionales"]) for i in informes
+        ),
+        "con_diferencias_no_explicadas": sum(
+            bool(i["diferencias_no_explicadas"]) for i in informes
+        ),
+        "documentos": len(documentos),
+        "documentos_tipo_coincide": sum(d["coincide_tipo"] for d in documentos),
+        "documentos_es_valido_coincide": sum(d["coincide_es_valido"] for d in documentos),
     }

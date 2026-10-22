@@ -9,6 +9,7 @@ from apps.motor.comparacion import (
     a_dict_legado,
     cargar_legado,
     comparar_profesor,
+    resumir,
     validar_ruta_salida,
 )
 from apps.motor.resultado import ResultadoDocumento
@@ -212,3 +213,61 @@ def test_comparar_falla_claro_si_la_carpeta_no_existe(settings, tmp_path):
             "--salida",
             str(tmp_path / "i.json"),
         )
+
+
+# --- Ajustes tras la comparación real ---
+
+
+def test_estado_detallado_distinto_se_reporta_aunque_coincida_completo(legado):
+    """INCOMPLETO del legado frente a SIN_DOCUMENTOS: no COMPLETO en los dos, pero distintos."""
+    informe = comparar_profesor("P", [], [], catalogo_inicial(), legado)
+    assert informe["coincide_estado"]
+    assert not informe["coincide_estado_detallado"]
+
+
+def test_estado_detallado_igual(legado):
+    nuevos = completos()
+    informe = comparar_profesor(
+        "P", [a_dict_legado(r) for r in nuevos], nuevos, catalogo_inicial(), legado
+    )
+    assert informe["coincide_estado_detallado"]
+
+
+def test_resumen_cuenta_el_estado_detallado_distinto(legado):
+    nuevos = completos()
+    informes = [
+        comparar_profesor("A", [], [], catalogo_inicial(), legado),
+        comparar_profesor(
+            "B", [a_dict_legado(r) for r in nuevos], nuevos, catalogo_inicial(), legado
+        ),
+    ]
+    resumen = resumir(informes)
+    assert resumen["profesores"] == 2
+    assert resumen["estado_coincide"] == 2
+    assert resumen["estado_detallado_difiere"] == 1
+    assert resumen["documentos"] == 9
+
+
+@pytest.mark.parametrize("comando", ["probar_motor", "comparar_con_legado"])
+def test_sin_migraciones_da_un_mensaje_claro(settings, monkeypatch, tmp_path, comando):
+    import apps.motor.servicio as servicio
+
+    settings.ES_ENTORNO_DE_PRUEBAS = False
+    settings.MOTOR_SIMULADO = False
+    monkeypatch.setattr(servicio, "hay_migraciones_pendientes", lambda: True)
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF")
+    argumentos = (
+        [str(pdf)]
+        if comando == "probar_motor"
+        else [str(tmp_path), "--limite", "1", "--salida", str(tmp_path / "i.json")]
+    )
+    with pytest.raises(CommandError, match="Ejecuta manage.py migrate primero"):
+        call_command(comando, *argumentos)
+
+
+@pytest.mark.django_db
+def test_base_migrada_no_tiene_migraciones_pendientes():
+    from apps.motor.servicio import hay_migraciones_pendientes
+
+    assert not hay_migraciones_pendientes()
