@@ -123,6 +123,10 @@ class Profesor(models.Model):
         related_name="profesores_verificados",
     )
     verificado_en = models.DateTimeField(null=True, blank=True)
+    # False si la carpeta ya no está en el disco. El profesor conserva su último estado y
+    # su historial; las corridas lo saltan. Una carpeta renombrada aparece como profesor
+    # nuevo (ADR 0004).
+    carpeta_presente = models.BooleanField(default=True, db_index=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -157,6 +161,9 @@ class Documento(models.Model):
     tamano = models.PositiveBigIntegerField("tamaño (bytes)")
     modificado_en = models.DateTimeField()
     presente = models.BooleanField(default=True)
+    # El mismo sha256 falló de forma transitoria en 2 corridas seguidas: las corridas
+    # automáticas lo saltan hasta que cambie el archivo o un reintento manual salga bien.
+    reintentos_agotados = models.BooleanField(default=False, db_index=True)
     detectado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -207,9 +214,23 @@ class Corrida(models.Model):
     errores = models.JSONField(default=list, blank=True)
     tokens_entrada = models.PositiveBigIntegerField(default=0)
     tokens_salida = models.PositiveBigIntegerField(default=0)
+    # El worker lo actualiza por documento: muestra si sigue vivo (Fase 4).
+    latido = models.DateTimeField(null=True, blank=True)
+    # El worker lo revisa entre documentos.
+    cancelacion_solicitada = models.BooleanField(default=False)
+    cancelacion_solicitada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="corridas_canceladas",
+    )
+    cancelacion_solicitada_en = models.DateTimeField(null=True, blank=True)
+    mensaje = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-creada_en", "-id"]
+        permissions = [("cancelar_corrida", "Puede cancelar una corrida")]
         constraints = [
             models.CheckConstraint(
                 condition=Q(alcance="un_profesor", profesor__isnull=False)
@@ -224,7 +245,14 @@ class Corrida(models.Model):
 
 
 class Analisis(ModeloInmutable):
-    """Resultado de la IA para un documento. Inmutable: reanalizar crea uno nuevo."""
+    """Resultado de la IA para un documento. Inmutable: reanalizar crea uno nuevo.
+
+    Un fallo transitorio se guarda con tipo_detectado="error" y un archivo ilegible con
+    "ilegible" (ADR 0004): así queda el historial de intentos y sus tokens.
+    """
+
+    TIPO_ERROR = "error"
+    TIPO_ILEGIBLE = "ilegible"
 
     documento = models.ForeignKey(Documento, on_delete=models.PROTECT, related_name="analisis")
     corrida = models.ForeignKey(Corrida, on_delete=models.PROTECT, related_name="analisis")
@@ -242,6 +270,8 @@ class Analisis(ModeloInmutable):
     respuesta_cruda = models.JSONField(default=dict, blank=True)
     tokens_entrada = models.PositiveIntegerField(default=0)
     tokens_salida = models.PositiveIntegerField(default=0)
+    tokens_cache_lectura = models.PositiveIntegerField(default=0)
+    tokens_cache_creacion = models.PositiveIntegerField(default=0)
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
