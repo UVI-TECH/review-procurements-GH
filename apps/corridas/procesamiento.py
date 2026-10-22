@@ -8,6 +8,9 @@
 - Cancelación: cancelacion_solicitada se revisa entre documentos.
 - Tiempo límite por documento: el inspector aislado (proceso aparte); el SDK tiene su
   propio timeout para la llamada a la API.
+- Consola: id, alcance y contadores, nunca nombres de profesores ni de archivos.
+- Ctrl+C (o Ctrl+Break en Windows): cierra el pool y sale con WorkerDetenido; la corrida
+  queda "en proceso" y se reanuda al volver a iniciar el worker.
 """
 
 import hashlib
@@ -35,6 +38,22 @@ from .servicios import crear_fuente, documentos_a_analizar
 logger = logging.getLogger(__name__)
 
 
+class WorkerDetenido(Exception):
+    """Ctrl+C: el worker se detuvo limpio. corrida_id es la que queda por reanudar."""
+
+    def __init__(self, corrida_id=None):
+        super().__init__(corrida_id)
+        self.corrida_id = corrida_id
+
+
+def _no_informar(mensaje):
+    pass
+
+
+def _miles(numero):
+    return f"{numero:,}".replace(",", ".")
+
+
 def siguiente_corrida():
     """Primero las huérfanas (en proceso), luego la pendiente más antigua."""
     return (
@@ -44,34 +63,55 @@ def siguiente_corrida():
 
 
 def ejecutar_worker(
-    *, una_vez=False, intervalo=None, fuente=None, crear_cliente=None, inspector=None, antes=None
+    *,
+    una_vez=False,
+    intervalo=None,
+    fuente=None,
+    crear_cliente=None,
+    inspector=None,
+    antes=None,
+    informar=None,
 ):
     """Procesa corridas hasta que no quede ninguna (una_vez) o para siempre.
 
     antes: se llama ya con el bloqueo tomado (el comando revisa ahí las migraciones).
+    informar: recibe los mensajes de progreso para la consola.
     """
     intervalo = settings.WORKER_INTERVALO_SEGUNDOS if intervalo is None else intervalo
     crear_cliente = crear_cliente or crear_cliente_del_motor
+    informar = informar or _no_informar
     with BloqueoWorker(settings.RUTA_BLOQUEO_WORKER):
         if antes:
             antes()
         propio = inspector is None
         inspector = inspector or InspectorAislado(settings.MOTOR_TIMEOUT_PDF_SEGUNDOS)
+        actual, esperando = None, False
         try:
             while True:
                 corrida = siguiente_corrida()
                 if corrida is None:
                     if una_vez:
+                        informar("Sin corridas pendientes.")
                         return
+                    if not esperando:
+                        informar("Sin corridas pendientes; esperando…")
+                        esperando = True
                     time.sleep(intervalo)
                     continue
+                esperando, actual = False, corrida.pk
                 catalogo = cargar_catalogo()
                 procesar_corrida(
                     corrida,
                     fuente=fuente or crear_fuente(),
                     cliente=crear_cliente(catalogo, inspector=inspector),
                     catalogo=catalogo,
+                    informar=informar,
                 )
+                actual = None
+        except KeyboardInterrupt:
+            if propio:
+                inspector.terminar()
+            raise WorkerDetenido(actual) from None
         except BaseException:
             if propio:
                 inspector.terminar()  # en Windows, que no quede un python.exe huérfano
@@ -81,8 +121,13 @@ def ejecutar_worker(
                 inspector.cerrar()
 
 
-def procesar_corrida(corrida, *, fuente, cliente, catalogo):
+def procesar_corrida(corrida, *, fuente, cliente, catalogo, informar=None):
+    informar = informar or _no_informar
     reanudada = corrida.estado == Corrida.Estado.EN_PROCESO
+    informar(
+        f"Corrida {corrida.pk} ({corrida.alcance})"
+        f"{' reanudada' if reanudada else ''}: escaneando la carpeta…"
+    )
     ahora = timezone.now()
     corrida.estado = Corrida.Estado.EN_PROCESO
     corrida.inicio = corrida.inicio or ahora
@@ -97,6 +142,13 @@ def procesar_corrida(corrida, *, fuente, cliente, catalogo):
         pendientes = list(documentos_a_analizar(corrida.alcance, profesor, corrida))
         corrida.total_documentos = corrida.analisis.count() + len(pendientes)
         corrida.save(update_fields=["total_documentos"])
+        if reanudada:
+            informar(
+                f"Corrida {corrida.pk} reanudada: {len(pendientes)} de "
+                f"{corrida.total_documentos} documentos por analizar."
+            )
+        else:
+            informar(f"Corrida {corrida.pk}: {corrida.total_documentos} documentos por analizar.")
         por_profesor = {}
         for documento in pendientes:
             por_profesor.setdefault(documento.profesor_id, []).append(documento)
@@ -109,12 +161,13 @@ def procesar_corrida(corrida, *, fuente, cliente, catalogo):
         for actual in profesores:
             for documento in por_profesor.get(actual.pk, []):
                 if Corrida.objects.filter(pk=corrida.pk, cancelacion_solicitada=True).exists():
-                    _terminar(corrida, Corrida.Estado.CANCELADA, "corrida_cancelada")
+                    _terminar(corrida, Corrida.Estado.CANCELADA, "corrida_cancelada", informar)
                     return
                 _analizar_documento(corrida, documento, fuente, cliente)
+                _informar_progreso(corrida, informar)
             recalcular_estado(actual, catalogo)
     except ErrorEscaneo as error:
-        _terminar(corrida, Corrida.Estado.FALLIDA, "corrida_fallida", mensaje=str(error))
+        _terminar(corrida, Corrida.Estado.FALLIDA, "corrida_fallida", informar, str(error))
         return
     except Exception as error:
         logger.exception("La corrida %s falló", corrida.pk)
@@ -122,18 +175,40 @@ def procesar_corrida(corrida, *, fuente, cliente, catalogo):
             corrida,
             Corrida.Estado.FALLIDA,
             "corrida_fallida",
-            mensaje=f"Error inesperado ({type(error).__name__}). Revisa el log del worker.",
+            informar,
+            f"Error inesperado ({type(error).__name__}). Revisa el log del worker.",
         )
         return
-    _terminar(corrida, Corrida.Estado.COMPLETADA, "corrida_completada")
+    _terminar(corrida, Corrida.Estado.COMPLETADA, "corrida_completada", informar)
 
 
-def _terminar(corrida, estado, accion, mensaje=""):
+def _informar_progreso(corrida, informar):
+    procesados, total, errores, entrada, salida = Corrida.objects.values_list(
+        "documentos_procesados",
+        "total_documentos",
+        "documentos_con_error",
+        "tokens_entrada",
+        "tokens_salida",
+    ).get(pk=corrida.pk)
+    informar(
+        f"Corrida {corrida.pk} · {procesados}/{total} · errores: {errores} · "
+        f"tokens: entrada {_miles(entrada)}, salida {_miles(salida)}"
+    )
+
+
+def _terminar(corrida, estado, accion, informar, mensaje=""):
     corrida.refresh_from_db()
     corrida.estado = estado
     corrida.fin = timezone.now()
     corrida.mensaje = mensaje
     corrida.save(update_fields=["estado", "fin", "mensaje"])
+    informar(
+        f"Corrida {corrida.pk} {corrida.get_estado_display().lower()}: "
+        f"{corrida.documentos_procesados}/{corrida.total_documentos} documentos, "
+        f"{corrida.documentos_con_error} con error, tokens entrada "
+        f"{_miles(corrida.tokens_entrada)}, salida {_miles(corrida.tokens_salida)}."
+        + (f" {mensaje}" if mensaje else "")
+    )
     registrar(
         None,
         accion,

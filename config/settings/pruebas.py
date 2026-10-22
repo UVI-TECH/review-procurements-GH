@@ -18,7 +18,8 @@ MODO_SOLO_LECTURA = False
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        # En memoria; las pruebas que lanzan el worker como subproceso indican un archivo.
+        "NAME": env.str("RUTA_BASE_DATOS_PRUEBAS", default="") or ":memory:",
     }
 }
 
