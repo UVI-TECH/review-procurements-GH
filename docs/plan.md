@@ -236,6 +236,7 @@ Siete fases hasta reemplazar el `.exe`, cada una con un criterio de aceptación 
    - Criterio: el respaldo restaurado en el equipo de John muestra los mismos datos; un respaldo dañado se detecta.
 7. **Despliegue en el PC de Gestión Humana.** `instalar.ps1`, `iniciar.bat`, arranque automático, manual de operación y piloto en paralelo con el `.exe`.
    - Criterio: durante el piloto, los mismos resultados que el `.exe` sobre la misma carpeta. Luego se retira el `.exe` y se rota la API key (antes, si el `.exe` circuló fuera de Gestión Humana).
+   - OneDrive: en el PC de Gestión Humana, la carpeta Contrataciones se configura como **"Mantener siempre en este dispositivo"**, para que el worker no dependa de descargas bajo demanda. El ERROR por un archivo que no se pudo leer del disco queda como respaldo, no como el caso normal.
 8. **Futuro, con servidor.** PostgreSQL, Docker, login con Entra ID, lectura por Graph desde SharePoint, Message Batches API para cargas masivas y notificaciones.
 
 ## Skills de Claude Code por fase

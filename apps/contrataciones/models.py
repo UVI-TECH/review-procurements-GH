@@ -12,6 +12,23 @@ validar_codigo = RegexValidator(
     r"^[a-z0-9_]+$", "Usa solo minúsculas sin tildes, dígitos y guion bajo."
 )
 
+# El motor usa "otro" e "ilegible" como tipo_detectado y el legado usa "error"
+# (ADR 0003). Un tipo o alias con esos códigos se confundiría con ellos.
+CODIGOS_RESERVADOS = ("otro", "ilegible", "error")
+
+
+def _sin_codigo_reservado():
+    """Condición para la BD, sin distinguir mayúsculas (un .create() salta el validador)."""
+    condicion = Q()
+    for codigo in CODIGOS_RESERVADOS:
+        condicion &= ~Q(codigo__iexact=codigo)
+    return condicion
+
+
+def _validar_no_reservado(codigo):
+    if (codigo or "").lower() in CODIGOS_RESERVADOS:
+        raise ValidationError({"codigo": f"«{codigo}» es un código reservado del motor; usa otro."})
+
 
 class TipoDocumento(models.Model):
     """Catálogo de requisitos. activo=False retira un tipo sin perder su historial."""
@@ -31,11 +48,19 @@ class TipoDocumento(models.Model):
         ordering = ["orden", "codigo"]
         verbose_name = "tipo de documento"
         verbose_name_plural = "tipos de documento"
+        constraints = [
+            models.CheckConstraint(
+                condition=_sin_codigo_reservado(),
+                name="tipodocumento_codigo_no_reservado",
+                violation_error_message="Ese código está reservado para el motor.",
+            ),
+        ]
 
     def __str__(self):
         return self.etiqueta
 
     def clean(self):
+        _validar_no_reservado(self.codigo)
         if AliasTipoDocumento.objects.filter(codigo=self.codigo).exists():
             raise ValidationError({"codigo": "Ya existe un alias con este código."})
 
@@ -50,11 +75,19 @@ class AliasTipoDocumento(models.Model):
         ordering = ["codigo"]
         verbose_name = "alias de tipo de documento"
         verbose_name_plural = "alias de tipos de documento"
+        constraints = [
+            models.CheckConstraint(
+                condition=_sin_codigo_reservado(),
+                name="alias_codigo_no_reservado",
+                violation_error_message="Ese código está reservado para el motor.",
+            ),
+        ]
 
     def __str__(self):
         return self.codigo
 
     def clean(self):
+        _validar_no_reservado(self.codigo)
         # La unicidad entre alias la garantiza la BD; esta cruza tablas y va en el modelo.
         if TipoDocumento.objects.filter(codigo=self.codigo).exists():
             raise ValidationError({"codigo": "Ya existe un tipo de documento con este código."})
