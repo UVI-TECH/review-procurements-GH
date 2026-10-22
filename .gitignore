@@ -1,0 +1,39 @@
+# Secretos: solo se versiona .env.example
+.env
+.env.*
+!.env.example
+
+# Bases de datos y respaldos (pueden contener datos reales de Gestión Humana)
+*.db
+*.sqlite3
+*.sqlite3-journal
+*.db-journal
+*.db-wal
+*.db-shm
+respaldos/
+*.zip
+
+# Archivos subidos y estáticos recolectados
+media/
+staticfiles/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Editores y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code: solo se versiona settings.json
+.claude/settings.local.json
