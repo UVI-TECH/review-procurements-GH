@@ -12,10 +12,8 @@ Convenciones (sobre el nombre normalizado, sin .pdf):
 
 import re
 
-from django.conf import settings
-
+from .cliente_base import ClienteBase
 from .esquema import TIPO_OTRO, interpretar_entrada
-from .pdf import ErrorPdf, PdfIlegible, leer_pdf
 from .reglas import norm
 from .resultado import ResultadoDocumento
 
@@ -24,35 +22,26 @@ CEDULA_OTRA_PERSONA = "1000000099"
 MODELO_SIMULADO = "simulado"
 
 
-class ClienteSimulado:
+class ClienteSimulado(ClienteBase):
     modelo = MODELO_SIMULADO
 
-    def __init__(self, catalogo):
-        self.catalogo = catalogo
+    def __init__(self, catalogo, *, inspector=None):
+        super().__init__(catalogo, inspector=inspector)
         self._codigos = sorted(catalogo.codigos_reconocidos, key=len, reverse=True)
 
-    def analizar(self, ruta, profesor):
-        try:
-            pdf = leer_pdf(
-                ruta,
-                max_bytes=settings.MOTOR_MAX_BYTES_PDF,
-                max_paginas=settings.MOTOR_MAX_PAGINAS_PDF,
-            )
-        except PdfIlegible as problema:
-            return ResultadoDocumento.ilegible(
-                ruta.name, str(problema), modificado_en=problema.modificado_en
-            )
-        except ErrorPdf as error:
-            return ResultadoDocumento.con_error(ruta.name, str(error), modelo=self.modelo)
-
+    def _analizar_pdf(self, pdf, nombre_archivo, profesor):
         metadatos = {"modificado_en": pdf.modificado_en, "modelo": self.modelo}
-        nombre = norm(ruta.name)
+        nombre = norm(nombre_archivo)
         if "error_api" in nombre:
-            return ResultadoDocumento.con_error(ruta.name, "Error simulado de la API.", **metadatos)
+            return ResultadoDocumento.con_error(
+                nombre_archivo, "Error simulado de la API.", **metadatos
+            )
         entrada = self._respuesta(nombre)
         if "respuesta_malformada" in nombre:
             del entrada["es_valido"]
-        return interpretar_entrada(entrada, self.catalogo, nombre_archivo=ruta.name, **metadatos)
+        return interpretar_entrada(
+            entrada, self.catalogo, nombre_archivo=nombre_archivo, **metadatos
+        )
 
     def _respuesta(self, nombre):
         codigo = next((c for c in self._codigos if c in nombre), TIPO_OTRO)
