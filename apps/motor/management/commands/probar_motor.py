@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.motor.catalogo import cargar_catalogo
 from apps.motor.cliente_claude import ClienteClaude
-from apps.motor.servicio import exigir_api_real
+from apps.motor.servicio import exigir_api_real, exigir_migraciones
 
 
 class Command(BaseCommand):
@@ -24,6 +24,7 @@ class Command(BaseCommand):
         ruta = Path(ruta).expanduser()
         if not ruta.is_file():
             raise CommandError(f"No existe el archivo: {ruta}")
+        exigir_migraciones()
 
         cliente = ClienteClaude(cargar_catalogo())
         resultado = cliente.analizar(ruta, profesor or ruta.parent.name)

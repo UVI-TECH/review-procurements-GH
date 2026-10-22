@@ -15,7 +15,7 @@ import re
 from django.conf import settings
 
 from .esquema import TIPO_OTRO, interpretar_entrada
-from .pdf import ErrorPdf, leer_pdf
+from .pdf import ErrorPdf, PdfIlegible, leer_pdf
 from .reglas import norm
 from .resultado import ResultadoDocumento
 
@@ -37,6 +37,10 @@ class ClienteSimulado:
                 ruta,
                 max_bytes=settings.MOTOR_MAX_BYTES_PDF,
                 max_paginas=settings.MOTOR_MAX_PAGINAS_PDF,
+            )
+        except PdfIlegible as problema:
+            return ResultadoDocumento.ilegible(
+                ruta.name, str(problema), modificado_en=problema.modificado_en
             )
         except ErrorPdf as error:
             return ResultadoDocumento.con_error(ruta.name, str(error), modelo=self.modelo)

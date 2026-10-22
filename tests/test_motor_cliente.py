@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from apps.motor.cliente_claude import ClienteClaude
 from apps.motor.esquema import NOMBRE_HERRAMIENTA
-from apps.motor.pdf import ErrorPdf, leer_pdf
+from apps.motor.pdf import PdfIlegible, leer_pdf
 from apps.motor.servicio import crear_cliente
 from apps.motor.simulado import CEDULA_SIMULADA, ClienteSimulado
 from tests.fixtures.catalogo import DOTC, FORMATO, MEDICO, catalogo_inicial
@@ -189,31 +189,32 @@ def test_errores_de_la_api_no_se_registran_con_la_clave(pdf, caplog):
 # --- Límites del PDF, sin llamar a la API ---
 
 
-def test_pdf_por_encima_del_tamano_es_error_sin_llamar_a_la_api(pdf, settings):
+def test_pdf_por_encima_del_tamano_es_ilegible_sin_llamar_a_la_api(pdf, settings):
     settings.MOTOR_MAX_BYTES_PDF = 100
     sdk = SdkFalso(respuesta(entrada()))
     resultado = cliente(sdk).analizar(pdf, "P")
-    assert resultado.es_error
-    assert "MB" in resultado.error
+    assert resultado.es_ilegible and not resultado.es_error
+    assert "MB" in resultado.observaciones
+    assert "solicitar" in resultado.observaciones
     assert sdk.llamadas == []
 
 
-def test_pdf_con_demasiadas_paginas_es_error_sin_llamar_a_la_api(tmp_path, settings):
+def test_pdf_con_demasiadas_paginas_es_ilegible_sin_llamar_a_la_api(tmp_path, settings):
     settings.MOTOR_MAX_PAGINAS_PDF = 2
     sdk = SdkFalso(respuesta(entrada()))
     resultado = cliente(sdk).analizar(crear_pdf(tmp_path / "largo.pdf", paginas=3), "P")
-    assert resultado.es_error
-    assert "3 páginas" in resultado.error
+    assert resultado.es_ilegible and not resultado.es_error
+    assert "3 páginas" in resultado.observaciones
     assert sdk.llamadas == []
 
 
-def test_archivo_que_no_es_pdf_es_error_sin_llamar_a_la_api(tmp_path):
+def test_archivo_que_no_es_pdf_es_ilegible_sin_llamar_a_la_api(tmp_path):
     falso = tmp_path / "falso.pdf"
     falso.write_bytes(b"esto no es un PDF")
     sdk = SdkFalso(respuesta(entrada()))
     resultado = cliente(sdk).analizar(falso, "P")
-    assert resultado.es_error
-    assert "no es un PDF válido" in resultado.error
+    assert resultado.es_ilegible and not resultado.es_error
+    assert "no es un PDF válido" in resultado.observaciones
     assert sdk.llamadas == []
 
 
@@ -225,12 +226,17 @@ def test_pdf_con_clave_de_propietario_se_envia(tmp_path):
     assert len(sdk.llamadas) == 1
 
 
-def test_pdf_que_pide_clave_para_abrirse_es_error(tmp_path):
+def test_pdf_que_pide_clave_para_abrirse_es_ilegible(tmp_path):
     cifrado = crear_pdf_cifrado(tmp_path / "protegido.pdf", clave_usuario="secreta")
     sdk = SdkFalso(respuesta(entrada()))
     resultado = cliente(sdk).analizar(cifrado, "P")
-    assert resultado.es_error
-    assert "contraseña" in resultado.error
+    assert resultado.es_ilegible and not resultado.es_error
+    assert resultado.tipo_detectado == "ilegible"
+    assert resultado.es_valido is False
+    assert resultado.observaciones == (
+        "PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña."
+    )
+    assert resultado.modificado_en is not None
     assert sdk.llamadas == []
 
 
@@ -239,12 +245,21 @@ def test_leer_pdf_cuenta_paginas_de_un_pdf_con_clave_de_propietario(tmp_path):
     assert leido.paginas == 1
 
 
+def test_archivo_que_no_se_puede_leer_es_error_transitorio(tmp_path):
+    """P. ej. un archivo de OneDrive aún no descargado: se resuelve reanalizando."""
+    sdk = SdkFalso(respuesta(entrada()))
+    resultado = cliente(sdk).analizar(tmp_path / "no-sincronizado.pdf", "P")
+    assert resultado.es_error and not resultado.es_ilegible
+    assert "No se pudo leer el archivo" in resultado.error
+    assert sdk.llamadas == []
+
+
 def test_leer_pdf_revisa_el_tamano_antes_de_abrirlo(tmp_path, monkeypatch):
     """Un PDF demasiado grande no llega a pypdf."""
     import apps.motor.pdf as modulo
 
     monkeypatch.setattr(modulo, "PdfReader", lambda *a, **k: pytest.fail("abrió el PDF"))
-    with pytest.raises(ErrorPdf):
+    with pytest.raises(PdfIlegible):
         leer_pdf(crear_pdf(tmp_path / "x.pdf"), max_bytes=10, max_paginas=5)
 
 
@@ -298,4 +313,35 @@ def test_simulado_reproduce_errores(tmp_path, archivo, mensaje):
 def test_simulado_tambien_valida_el_pdf(tmp_path, settings):
     settings.MOTOR_MAX_PAGINAS_PDF = 1
     ruta = crear_pdf(tmp_path / "largo.pdf", paginas=2)
-    assert ClienteSimulado(catalogo_inicial()).analizar(ruta, "P").es_error
+    assert ClienteSimulado(catalogo_inicial()).analizar(ruta, "P").es_ilegible
+
+
+def test_advertencias_de_pypdf_van_al_logger_en_debug():
+    """Avisos como "Ignoring wrong pointing object" no llegan a la raíz (pantalla) como WARNING.
+
+    No usa caplog: pytest engancha sus handlers también al logger "pypdf", que no propaga.
+    """
+    import logging
+
+    import apps.motor.pdf  # noqa: F401  (instala el desvío)
+
+    class Lista(logging.Handler):
+        def __init__(self):
+            super().__init__(logging.DEBUG)
+            self.registros = []
+
+        def emit(self, record):
+            self.registros.append(record)
+
+    raiz = logging.getLogger()
+    lista, nivel = Lista(), raiz.level
+    raiz.addHandler(lista)
+    raiz.setLevel(logging.DEBUG)
+    try:
+        logging.getLogger("pypdf._reader").warning("Ignoring wrong pointing object %d", 7)
+    finally:
+        raiz.removeHandler(lista)
+        raiz.setLevel(nivel)
+    assert [(r.name, r.levelno, r.getMessage()) for r in lista.registros] == [
+        ("apps.motor.pdf", logging.DEBUG, "pypdf: Ignoring wrong pointing object 7")
+    ]

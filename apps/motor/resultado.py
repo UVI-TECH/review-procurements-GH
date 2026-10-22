@@ -3,6 +3,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# tipo_detectado de un archivo que no se pudo analizar por un problema del propio archivo
+# (contraseña, dañado, demasiado grande). No es un código del catálogo ni de la IA.
+TIPO_ILEGIBLE = "ilegible"
+
 
 @dataclass(frozen=True)
 class Uso:
@@ -16,7 +20,12 @@ class Uso:
 
 @dataclass(frozen=True)
 class ResultadoDocumento:
-    """Lo que el motor sabe de un PDF. Con error no vacío, el análisis no sirvió."""
+    """Lo que el motor sabe de un PDF.
+
+    Con error no vacío, el análisis falló por algo transitorio (API, red) y se resuelve
+    reanalizando. Un archivo ilegible no es un error: es un problema del documento, con
+    una observación que dice qué pedir.
+    """
 
     nombre_archivo: str
     tipo_detectado: str = ""
@@ -36,6 +45,20 @@ class ResultadoDocumento:
     def es_error(self):
         return bool(self.error)
 
+    @property
+    def es_ilegible(self):
+        return self.tipo_detectado == TIPO_ILEGIBLE
+
     @classmethod
     def con_error(cls, nombre_archivo, mensaje, **extra):
         return cls(nombre_archivo=nombre_archivo, es_valido=False, error=mensaje, **extra)
+
+    @classmethod
+    def ilegible(cls, nombre_archivo, observacion, **extra):
+        return cls(
+            nombre_archivo=nombre_archivo,
+            tipo_detectado=TIPO_ILEGIBLE,
+            es_valido=False,
+            observaciones=observacion,
+            **extra,
+        )

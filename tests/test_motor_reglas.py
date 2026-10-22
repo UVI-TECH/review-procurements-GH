@@ -330,3 +330,46 @@ def test_la_cedula_si_invalida_un_documento_otro_ajeno():
     extra = doc("otro", valido=True, cedula=OTRA)
     revalidados, _ = procesar(completos() + [extra])
     assert revalidados[-1].es_valido is False
+
+
+# --- Documentos ilegibles: problema permanente del archivo, no ERROR ---
+
+
+def ilegible(minutos=0):
+    return ResultadoDocumento.ilegible(
+        f"protegido_{minutos}.pdf",
+        "PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña.",
+        modificado_en=BASE + timedelta(minutes=minutos),
+    )
+
+
+def test_ilegible_con_faltante_es_incompleto_no_error():
+    """El caso real: un certificado de EPS con contraseña de usuario."""
+    protegido = ilegible()
+    _, evaluacion = procesar(completos(certificados_eps_afp=None) + [protegido])
+    assert evaluacion.estado == EstadoProfesor.INCOMPLETO
+    assert evaluacion.ilegibles == (protegido,)
+    assert evaluacion.errores == ()
+    assert protegido not in evaluacion.no_reconocidos
+
+
+def test_ilegible_impide_completo():
+    _, evaluacion = procesar(completos() + [ilegible()])
+    assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
+
+
+def test_ilegible_mas_error_transitorio_sin_completo_es_error():
+    fallido = doc("", valido=False, cedula="", error="Tiempo agotado")
+    _, evaluacion = procesar(completos(certificados_eps_afp=None) + [ilegible(), fallido])
+    assert evaluacion.estado == EstadoProfesor.ERROR
+
+
+def test_ilegible_no_cuenta_para_la_cedula_ni_se_revalida():
+    protegido = ilegible()
+    revalidados, _ = procesar(completos() + [protegido])
+    assert revalidados[-1] == protegido
+
+
+def test_solo_ilegibles_no_es_sin_documentos():
+    _, evaluacion = procesar([ilegible()])
+    assert evaluacion.estado == EstadoProfesor.INCOMPLETO

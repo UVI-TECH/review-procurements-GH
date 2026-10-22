@@ -9,8 +9,13 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.motor.catalogo import cargar_catalogo
 from apps.motor.cliente_claude import ClienteClaude
-from apps.motor.comparacion import cargar_legado, comparar_profesor, validar_ruta_salida
-from apps.motor.servicio import exigir_api_real, listar_pdfs
+from apps.motor.comparacion import (
+    cargar_legado,
+    comparar_profesor,
+    resumir,
+    validar_ruta_salida,
+)
+from apps.motor.servicio import exigir_api_real, exigir_migraciones, listar_pdfs
 
 
 class _ContadorDeTokens:
@@ -52,6 +57,7 @@ class Command(BaseCommand):
         if limite < 1:
             raise CommandError("--limite debe ser al menos 1.")
         ruta_salida = validar_ruta_salida(salida)
+        exigir_migraciones()
 
         catalogo = cargar_catalogo()
         cliente_nuevo = ClienteClaude(catalogo)
@@ -79,25 +85,8 @@ class Command(BaseCommand):
                 comparar_profesor(carpeta_profesor.name, viejos, nuevos, catalogo, legado)
             )
 
-        documentos = [d for i in informes for d in i["documentos"]]
         resumen = {
-            "profesores": len(informes),
-            "estado_coincide": sum(i["coincide_estado"] for i in informes),
-            "estado_difiere_por_ia": sum(
-                "ia" in (i["origen_diferencia_estado"] or "") for i in informes
-            ),
-            "estado_difiere_por_reglas": sum(
-                "reglas" in (i["origen_diferencia_estado"] or "") for i in informes
-            ),
-            "con_diferencias_intencionales": sum(
-                bool(i["diferencias_intencionales"]) for i in informes
-            ),
-            "con_diferencias_no_explicadas": sum(
-                bool(i["diferencias_no_explicadas"]) for i in informes
-            ),
-            "documentos": len(documentos),
-            "documentos_tipo_coincide": sum(d["coincide_tipo"] for d in documentos),
-            "documentos_es_valido_coincide": sum(d["coincide_es_valido"] for d in documentos),
+            **resumir(informes),
             "tokens_legado": {"entrada": contador.entrada, "salida": contador.salida},
             "tokens_nuevo": tokens_nuevo,
         }
