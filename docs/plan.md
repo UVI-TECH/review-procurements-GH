@@ -70,11 +70,11 @@ Nueve entidades (detalle y motivos en `docs/decisiones/0002-modelo-de-datos-y-ro
 | --- | --- | --- |
 | TipoDocumento | codigo, etiqueta, obligatorio, activo, orden, requiere\_firma | Catálogo de los 9 requisitos, editable desde el admin por el Administrador. `activo=False` retira un tipo sin perder su historial |
 | AliasTipoDocumento | tipo, codigo (único) | Códigos alternos, como `examen_medico_laboral_dotc` → certificado médico; se editan dentro del tipo |
-| Profesor | carpeta (única), nombre, cedula (texto, detectada), estado, verificado\_por, verificado\_en | Uno por carpeta |
-| Documento | profesor, ruta\_relativa (única por profesor), nombre\_archivo, sha256, tamano, modificado\_en, presente | Un PDF; el hash evita reanalizar lo que no cambió. Si desaparece se marca `presente=False`; nunca se borra |
-| Analisis | documento, corrida, sha256, modelo, tipo\_detectado, es\_valido, numero\_documento, nombre\_persona, tiene\_firma, datos\_extra (JSON), observaciones, respuesta\_cruda (JSON), tokens\_entrada, tokens\_salida | Resultado de la IA para un documento. Inmutable |
+| Profesor | carpeta (única), nombre, cedula (texto, detectada), estado, verificado\_por, verificado\_en, carpeta\_presente | Uno por carpeta. Si la carpeta desaparece, `carpeta_presente=False` y conserva su último estado |
+| Documento | profesor, ruta\_relativa (única por profesor), nombre\_archivo, sha256, tamano, modificado\_en, presente, reintentos\_agotados | Un PDF; el hash evita reanalizar lo que no cambió. Si desaparece se marca `presente=False`; nunca se borra |
+| Analisis | documento, corrida, sha256, modelo, tipo\_detectado, es\_valido, numero\_documento, nombre\_persona, tiene\_firma, datos\_extra (JSON), observaciones, respuesta\_cruda (JSON), tokens\_entrada, tokens\_salida, tokens de caché | Resultado de la IA para un documento. Inmutable. Un fallo transitorio se guarda con `tipo_detectado="error"` y un archivo ilegible con `"ilegible"` |
 | Revision | analisis, usuario, decision (aprobado / rechazado / corregido), tipo\_corregido, comentario, fecha | Decisión humana sobre un análisis. Inmutable: cambiar de opinión crea otra y prevalece la más reciente |
-| Corrida | iniciada\_por, alcance (todos / nuevos y modificados / un profesor) y profesor, estado (pendiente / en proceso / completada / fallida / cancelada), inicio, fin, totales, errores, tokens | Un procesamiento y su progreso |
+| Corrida | iniciada\_por, alcance (todos / nuevos y modificados / un profesor) y profesor, estado (pendiente / en proceso / completada / fallida / cancelada), inicio, fin, totales, errores, tokens, latido, cancelación solicitada | Un procesamiento y su progreso |
 | RegistroAuditoria | usuario (nulo si es el sistema), accion, objeto (ContentType + id), detalle (JSON), fecha | Quién vio, aprobó o cambió qué. Solo se agregan filas |
 | Respaldo | fecha, ruta, tamano, sha256, origen, estado | Historial de copias de seguridad |
 
@@ -133,6 +133,8 @@ Cada copia es consistente, va cifrada y llega sola a OneDrive. John la abre con 
 1. Copia con la función de backup de SQLite, no copiando el archivo, para que no quede corrupta si la app está escribiendo.
 2. Compresión ZIP cifrada con AES-256 (`pyzipper`). La clave va en `.env` (`CLAVE_RESPALDO`) y se guarda aparte.
 3. Se deja en una carpeta sincronizada configurable, idealmente en un sitio de SharePoint de Gestión Humana compartido con John.
+
+**La base de datos nunca va dentro de una carpeta sincronizada por OneDrive.** La sincronización con el modo WAL activo (archivos `-wal` y `-shm`) puede corromperla. Solo los respaldos van a OneDrive. La app se niega a arrancar si `RUTA_BASE_DATOS` cae dentro de `CARPETA_CONTRATACIONES`.
 4. Se comprueba: se abre la copia, se ejecuta `PRAGMA integrity_check` y se registra su hash.
 
 **Cuándo:** al terminar cada corrida; al abrir la app si el último respaldo tiene más de 24 horas; con una tarea programada de Windows en la noche; y con el botón manual.
@@ -212,7 +214,7 @@ revision-contrataciones/
     └── decisiones/            # registros de decisiones (ADR)
 ```
 
-**Comandos de gestión:** `escanear` (detecta nuevos y modificados), `worker`, `respaldar`, `restaurar_respaldo`, `importar_respaldo`. Para validar el motor con la API real (solo John, en su terminal): `probar_motor` y `comparar_con_legado`.
+**Comandos de gestión:** `escanear` (detecta nuevos y modificados), `crear_corrida` (con `--en-seco`), `cancelar_corrida`, `worker`, `respaldar`, `restaurar_respaldo`, `importar_respaldo`. Para validar el motor con la API real (solo John, en su terminal): `probar_motor` y `comparar_con_legado`.
 
 **Fuentes de documentos (`motor/fuentes.py`):** `FuenteCarpetaLocal` ahora; `FuenteGraph` cuando haya servidor, con la misma interfaz.
 
@@ -226,7 +228,7 @@ Siete fases hasta reemplazar el `.exe`, cada una con un criterio de aceptación 
    - Criterio: desde el admin se gestionan catálogo y usuarios; hay pruebas de permisos por rol.
 2. **Motor migrado.** Prompts desde el catálogo, cliente con tool use y caching, reglas puras, modo simulado.
    - Criterio: pruebas que reproducen los casos actuales (extranjero sin nombre, cédula de otra persona, formato sin firma, DOTC → certificado médico, duplicados). Un mismo PDF real da el mismo resultado que la versión actual.
-3. **Escaneo y corridas.** Escaneo por hash, worker, alcance de corrida, progreso, cancelación y reanudación.
+3. **Escaneo y corridas.** Escaneo por hash, worker, alcance de corrida, progreso, cancelación y reanudación (decisiones en `docs/decisiones/0004-escaneo-y-corridas.md`).
    - Criterio: una segunda corrida sin cambios no llama a la API; si se cierra la app a mitad, al reanudar no se duplica trabajo.
 4. **Interfaz.** Tablero, detalle con visor de PDF, revisión humana, verificación y auditoría.
    - Criterio: la persona de Gestión Humana completa una revisión sin ayuda, y cada acción queda registrada.
@@ -236,6 +238,7 @@ Siete fases hasta reemplazar el `.exe`, cada una con un criterio de aceptación 
    - Criterio: el respaldo restaurado en el equipo de John muestra los mismos datos; un respaldo dañado se detecta.
 7. **Despliegue en el PC de Gestión Humana.** `instalar.ps1`, `iniciar.bat`, arranque automático, manual de operación y piloto en paralelo con el `.exe`.
    - Criterio: durante el piloto, los mismos resultados que el `.exe` sobre la misma carpeta. Luego se retira el `.exe` y se rota la API key (antes, si el `.exe` circuló fuera de Gestión Humana).
+   - Base de datos: en una carpeta local, nunca en OneDrive (ver `docs/despliegue-windows.md`).
    - OneDrive: en el PC de Gestión Humana, la carpeta Contrataciones se configura como **"Mantener siempre en este dispositivo"**, para que el worker no dependa de descargas bajo demanda. El ERROR por un archivo que no se pudo leer del disco queda como respaldo, no como el caso normal.
 8. **Futuro, con servidor.** PostgreSQL, Docker, login con Entra ID, lectura por Graph desde SharePoint, Message Batches API para cargas masivas y notificaciones.
 
