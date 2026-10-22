@@ -299,3 +299,34 @@ def test_simulado_tambien_valida_el_pdf(tmp_path, settings):
     settings.MOTOR_MAX_PAGINAS_PDF = 1
     ruta = crear_pdf(tmp_path / "largo.pdf", paginas=2)
     assert ClienteSimulado(catalogo_inicial()).analizar(ruta, "P").es_error
+
+
+def test_advertencias_de_pypdf_van_al_logger_en_debug():
+    """Avisos como "Ignoring wrong pointing object" no llegan a la raíz (pantalla) como WARNING.
+
+    No usa caplog: pytest engancha sus handlers también al logger "pypdf", que no propaga.
+    """
+    import logging
+
+    import apps.motor.pdf  # noqa: F401  (instala el desvío)
+
+    class Lista(logging.Handler):
+        def __init__(self):
+            super().__init__(logging.DEBUG)
+            self.registros = []
+
+        def emit(self, record):
+            self.registros.append(record)
+
+    raiz = logging.getLogger()
+    lista, nivel = Lista(), raiz.level
+    raiz.addHandler(lista)
+    raiz.setLevel(logging.DEBUG)
+    try:
+        logging.getLogger("pypdf._reader").warning("Ignoring wrong pointing object %d", 7)
+    finally:
+        raiz.removeHandler(lista)
+        raiz.setLevel(nivel)
+    assert [(r.name, r.levelno, r.getMessage()) for r in lista.registros] == [
+        ("apps.motor.pdf", logging.DEBUG, "pypdf: Ignoring wrong pointing object 7")
+    ]

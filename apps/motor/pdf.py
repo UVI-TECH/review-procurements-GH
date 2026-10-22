@@ -7,10 +7,29 @@ pypdf se convierte en ErrorPdf. El tiempo límite por documento lo pone el worke
 """
 
 import io
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pypdf import PasswordType, PdfReader
+
+logger = logging.getLogger(__name__)
+
+
+class _AvisosDePypdfEnDebug(logging.Handler):
+    """pypdf avisa con logging.warning cada arreglo que hace a un PDF no conforme (p. ej.
+    "Ignoring wrong pointing object"). Son normales en certificados de portales: se
+    reemiten en DEBUG en este logger, en vez de salir en pantalla.
+    """
+
+    def emit(self, record):
+        logger.debug("pypdf: %s", record.getMessage())
+
+
+_logger_pypdf = logging.getLogger("pypdf")
+if not any(isinstance(h, _AvisosDePypdfEnDebug) for h in _logger_pypdf.handlers):
+    _logger_pypdf.addHandler(_AvisosDePypdfEnDebug())
+_logger_pypdf.propagate = False
 
 
 class ErrorPdf(Exception):
