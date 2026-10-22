@@ -52,7 +52,9 @@ Tres roles desde el inicio, implementados con grupos y permisos de Django y crea
 | --- | --- | --- |
 | Administrador | John (TI) | Todo: usuarios, configuración, catálogo de documentos, corridas, respaldos y auditoría |
 | Revisor GH | La persona de Gestión Humana | Lanzar corridas, ver tablero y PDFs, aprobar, rechazar o corregir documentos, verificar profesores, exportar informes |
-| Consulta | Nadie aún (futuro: directivos, auditoría) | Ver tablero e informes, sin modificar nada |
+| Consulta | Nadie aún (futuro: directivos, auditoría) | Ver tablero e informes resumidos, sin modificar nada. No ve PDFs, análisis ni revisiones, porque repiten datos personales |
+
+La matriz completa de permisos está en `docs/decisiones/0002-modelo-de-datos-y-roles.md`.
 
 - Login con usuario y contraseña locales, con los validadores de contraseña de Django.
 - La sesión expira tras 30 minutos de inactividad.
@@ -60,22 +62,27 @@ Tres roles desde el inicio, implementados con grupos y permisos de Django y crea
 
 ## Modelo de datos
 
-Ocho entidades. Cada análisis de la IA se guarda y nunca se sobrescribe, y la revisión humana prevalece sobre la IA.
+Nueve entidades (detalle y motivos en `docs/decisiones/0002-modelo-de-datos-y-roles.md`). Cada análisis de la IA se guarda y nunca se sobrescribe, y la revisión humana prevalece sobre la IA.
+
+**Ubicación:** `contrataciones` tiene el catálogo, `Profesor`, `Documento`, `Analisis`, `Revision` y `Corrida`; `cuentas` tiene `Usuario` y `RegistroAuditoria`; `respaldos` tiene `Respaldo`. `motor` y `corridas` no tienen modelos.
 
 | Entidad | Campos clave | Para qué |
 | --- | --- | --- |
-| TipoDocumento | codigo, etiqueta, obligatorio, orden, requiere\_firma, alias | Catálogo de los 9 requisitos, editable desde el admin; el alias resuelve casos como `examen_medico_laboral_dotc` → certificado médico |
-| Profesor | carpeta, nombre, cedula (detectada), estado, verificado\_por, verificado\_en | Uno por carpeta |
-| Documento | profesor, ruta\_relativa, nombre\_archivo, sha256, tamano, modificado\_en, presente | Un PDF; el hash evita reanalizar lo que no cambió |
-| Analisis | documento, corrida, modelo, tipo\_detectado, es\_valido, numero\_documento, nombre\_persona, tiene\_firma, datos\_extra (JSON), observaciones, respuesta\_cruda (JSON), tokens\_entrada, tokens\_salida | Resultado de la IA para un documento |
-| Revision | analisis, usuario, decision (aprobado / rechazado / corregido), tipo\_corregido, comentario, fecha | Decisión humana sobre un análisis |
-| Corrida | iniciada\_por, alcance (todos / nuevos y modificados / un profesor), estado, inicio, fin, totales, errores, tokens | Un procesamiento y su progreso |
-| RegistroAuditoria | usuario, accion, objeto, detalle (JSON), fecha | Quién vio, aprobó o cambió qué |
+| TipoDocumento | codigo, etiqueta, obligatorio, activo, orden, requiere\_firma | Catálogo de los 9 requisitos, editable desde el admin por el Administrador. `activo=False` retira un tipo sin perder su historial |
+| AliasTipoDocumento | tipo, codigo (único) | Códigos alternos, como `examen_medico_laboral_dotc` → certificado médico; se editan dentro del tipo |
+| Profesor | carpeta (única), nombre, cedula (texto, detectada), estado, verificado\_por, verificado\_en | Uno por carpeta |
+| Documento | profesor, ruta\_relativa (única por profesor), nombre\_archivo, sha256, tamano, modificado\_en, presente | Un PDF; el hash evita reanalizar lo que no cambió. Si desaparece se marca `presente=False`; nunca se borra |
+| Analisis | documento, corrida, sha256, modelo, tipo\_detectado, es\_valido, numero\_documento, nombre\_persona, tiene\_firma, datos\_extra (JSON), observaciones, respuesta\_cruda (JSON), tokens\_entrada, tokens\_salida | Resultado de la IA para un documento. Inmutable |
+| Revision | analisis, usuario, decision (aprobado / rechazado / corregido), tipo\_corregido, comentario, fecha | Decisión humana sobre un análisis. Inmutable: cambiar de opinión crea otra y prevalece la más reciente |
+| Corrida | iniciada\_por, alcance (todos / nuevos y modificados / un profesor) y profesor, estado (pendiente / en proceso / completada / fallida / cancelada), inicio, fin, totales, errores, tokens | Un procesamiento y su progreso |
+| RegistroAuditoria | usuario (nulo si es el sistema), accion, objeto (ContentType + id), detalle (JSON), fecha | Quién vio, aprobó o cambió qué. Solo se agregan filas |
 | Respaldo | fecha, ruta, tamano, sha256, origen, estado | Historial de copias de seguridad |
 
 **Documento vigente por tipo.** Si un profesor tiene varios PDFs del mismo tipo, cuenta en este orden: el aprobado por un revisor, luego el válido según la IA y, por último, el más reciente.
 
-**Estado del profesor (calculado):** COMPLETO, INCOMPLETO (faltan tipos), CON PROBLEMAS (hay documentos inválidos), SIN DOCUMENTOS o ERROR. La verificación humana va aparte: pendiente, o verificado por quién y cuándo.
+**Historial protegido:** `on_delete=PROTECT` en todo el historial; nada borra en cascada lo de un profesor. Una revisión sigue vigente mientras el sha256 de su análisis coincida con el del documento.
+
+**Estado del profesor (calculado):** SIN ANALIZAR (inicial), COMPLETO, INCOMPLETO (faltan tipos obligatorios), CON PROBLEMAS (hay documentos inválidos), SIN DOCUMENTOS o ERROR. Se calcula desde la Fase 4. La verificación humana va aparte: pendiente, o verificado por quién y cuándo.
 
 ## Migración del motor actual
 
@@ -181,6 +188,7 @@ revision-contrataciones/
 │   ├── urls.py
 │   └── wsgi.py
 ├── apps/
+│   ├── comun/                 # utilidades compartidas, sin modelos (modelos inmutables)
 │   ├── cuentas/               # usuarios, roles, auditoría
 │   ├── contrataciones/        # profesores, documentos, catálogo, revisiones, tablero
 │   ├── motor/                 # prompts, cliente Claude, reglas, fuentes de documentos

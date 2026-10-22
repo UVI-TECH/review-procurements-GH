@@ -43,6 +43,13 @@ export DJANGO_SECRET_KEY=$(uv run python -c "import secrets; print(secrets.token
   - `validacion.py`: solo lectura sobre un respaldo importado.
   - `pruebas.py`: usado por pytest; `MOTOR_SIMULADO=True` fijo, SQLite en memoria y hasher MD5.
 - Apps en `apps/`: `cuentas` (usuarios, roles, auditoría), `contrataciones` (dominio y tablero), `motor` (prompts, cliente Claude, reglas puras, fuentes de documentos), `corridas` (cola en la BD + worker como comando de Django), `reportes` (Excel) y `respaldos`. El motor no depende de la interfaz. Django y el worker se comunican solo a través de la base de datos.
+- Modelos (ver `docs/decisiones/0002-modelo-de-datos-y-roles.md`):
+  - `contrataciones`: catálogo (`TipoDocumento`, `AliasTipoDocumento`), `Profesor`, `Documento`, `Analisis`, `Revision` y `Corrida`.
+  - `cuentas`: `Usuario` y `RegistroAuditoria`. Escribe en la auditoría solo con `apps.cuentas.auditoria.registrar(usuario, accion, objeto, detalle)`.
+  - `respaldos`: `Respaldo`.
+  - `motor` y `corridas` no tienen modelos.
+- `Analisis`, `Revision` y `RegistroAuditoria` son de solo agregar (`apps/comun/inmutables.py`): `save()` sobre una fila existente, `delete()` y `update()`/`delete()` en bloque lanzan `ErrorInmutable`. No agregues vías para saltarse esto. Todo el historial usa `on_delete=PROTECT`.
+- Los roles (Administrador, Revisor GH, Consulta) los crea la migración `cuentas/0003_roles`. Un modelo o permiso nuevo se asigna a los grupos con su propia migración de datos, y se actualiza `tests/test_roles.py`.
 - `AUTH_USER_MODEL = "cuentas.Usuario"` (subclase de `AbstractUser`) existe desde la migración `0001`. Nunca uses `django.contrib.auth.models.User`; usa `get_user_model()` o `settings.AUTH_USER_MODEL`.
 - `legado/` es solo referencia: no se modifica y está excluido de ruff.
 
@@ -79,6 +86,7 @@ Límites conocidos:
 
 - Las negaciones de `respaldos/` van ancladas a la raíz (`./respaldos/**`). Con `**/respaldos/**` el sandbox oculta también el código de `apps/respaldos/`.
 - Dentro del sandbox, `git status` muestra como `??` puntos de montaje que crea el propio sandbox (`.bashrc`, `.gitconfig`, `.idea`, `.claude/agents`…). Haz `git add` con rutas explícitas; nunca `git add -A` ni `git add .`.
+- Dentro del sandbox, cambiar a una rama cuyo `.claude/settings.json` es distinto falla: git no puede reemplazar ese archivo y el repositorio queda a medias. Trabaja cada rama en un worktree (`git worktree add -b <rama> <ruta> main`) y deja el directorio principal en `main`. Al terminar, el usuario ejecuta `git worktree prune` en su terminal si el sandbox no pudo borrar los metadatos.
 - Una llamada sale del sandbox solo si **todos** sus comandos coinciden con `excludedCommands`. Por eso `gh ... | tail` falla con 401: ejecuta `gh` y `git push` solos, sin pipes, `cd` ni `$(...)`.
 - El sandbox no existe en Windows nativo: allí solo quedan las reglas `deny`. Tampoco aplica a lo que el usuario ejecuta en su propia terminal.
 - Si un comando necesita otra red u otra ruta, avisa qué restricción encontró; ampliar el sandbox lo decide el usuario.
