@@ -8,6 +8,7 @@ from .base import *  # noqa: F403
 
 DEBUG = False
 MOTOR_SIMULADO = True
+ES_ENTORNO_DE_PRUEBAS = True
 MODO_SOLO_LECTURA = False
 
 DATABASES = {

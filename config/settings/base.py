@@ -94,4 +94,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Dominio
 MOTOR_SIMULADO = env.bool("MOTOR_SIMULADO", default=False)
 MODO_SOLO_LECTURA = False
-MODELO_CLAUDE = env.str("MODELO_CLAUDE", default="claude-haiku-4-5")
+# Mismo id que el legado, para que la comparación sea con el mismo modelo.
+MODELO_CLAUDE = env.str("MODELO_CLAUDE", default="claude-haiku-4-5-20251001")
+MOTOR_MAX_TOKENS = 1024
+MOTOR_MAX_REINTENTOS = 3  # reintentos del SDK: 408, 409, 429, 5xx y conexión
+MOTOR_TIMEOUT_SEGUNDOS = 120
+MOTOR_PAUSA_ENTRE_LLAMADAS = 0.5
+# La API acepta 32 MB por petición y 100 páginas en modelos de 200K de contexto; el
+# base64 agrega un tercio al tamaño del PDF.
+MOTOR_MAX_BYTES_PDF = 22 * 1024 * 1024
+MOTOR_MAX_PAGINAS_PDF = 100
+
+# Solo pruebas.py lo pone en True; los comandos que gastan tokens se niegan a correr.
+ES_ENTORNO_DE_PRUEBAS = False
