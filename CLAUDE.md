@@ -50,6 +50,8 @@ export DJANGO_SECRET_KEY=$(uv run python -c "import secrets; print(secrets.token
   - `motor` y `corridas` no tienen modelos.
 - `Analisis`, `Revision` y `RegistroAuditoria` son de solo agregar (`apps/comun/inmutables.py`): `save()` sobre una fila existente, `delete()` y `update()`/`delete()` en bloque lanzan `ErrorInmutable`. No agregues vías para saltarse esto. Todo el historial usa `on_delete=PROTECT`.
 - Los roles (Administrador, Revisor GH, Consulta) los crea la migración `cuentas/0003_roles`. Un modelo o permiso nuevo se asigna a los grupos con su propia migración de datos, y se actualiza `tests/test_roles.py`.
+- El motor (`apps/motor/`, ver `docs/decisiones/0003-motor-migrado.md`) no depende del ORM: trabaja con dataclasses (`ResultadoDocumento`, `Catalogo`), y solo `catalogo.cargar_catalogo()` lee la base de datos. Usa `servicio.crear_cliente()`, que devuelve el cliente simulado mientras `MOTOR_SIMULADO=True`. El cliente real se niega a crearse en ese caso. En pruebas, el cliente real solo se usa con un SDK falso inyectado (`ClienteClaude(catalogo, sdk=...)`).
+- Los PDFs no son de confianza. Cualquier fallo al leerlos o analizarlos se devuelve como un `ResultadoDocumento` con `error`, nunca como una excepción.
 - `AUTH_USER_MODEL = "cuentas.Usuario"` (subclase de `AbstractUser`) existe desde la migración `0001`. Nunca uses `django.contrib.auth.models.User`; usa `get_user_model()` o `settings.AUTH_USER_MODEL`.
 - `legado/` es solo referencia: no se modifica y está excluido de ruff.
 
@@ -59,6 +61,7 @@ export DJANGO_SECRET_KEY=$(uv run python -c "import secrets; print(secrets.token
 - **Nunca** pongas datos reales de Gestión Humana en el repositorio: ni PDFs, ni cédulas, ni nombres, ni Excel históricos. Para pruebas usa datos sintéticos en `tests/fixtures/`.
 - La validación con respaldos reales (`importar_respaldo`, settings `validacion`) se hace en un **clon aparte, fuera de este repositorio** (p. ej. `~/validacion-contrataciones/`), donde **nunca se abre Claude Code**. En este repositorio no se importan respaldos reales.
 - En desarrollo y en pruebas se usa el motor simulado (`MOTOR_SIMULADO=True`). Ninguna prueba debe llamar a la API de Anthropic.
+- **Nunca ejecutes `probar_motor` ni `comparar_con_legado`:** llaman a la API real con PDFs reales y los ejecuta el usuario en su terminal. `.claude/settings.json` también los niega (`manage.py <comando>` y `call_command(...)`). Los PDFs sintéticos de las pruebas se generan con `tests/fixtures/pdfs.py`; no se suben PDFs al repositorio.
 - **Nunca leas ni imprimas el `.env`** ni sus variantes. Tampoco leas bases de datos (`*.db`, `*.sqlite3`) ni respaldos (`*.zip`, `respaldos/`): un respaldo importado contiene datos reales. Para saber qué variables existen, consulta `.env.example`. Si una variable nueva hace falta, agrégala a `.env.example` sin valor y pide al usuario que la complete.
 - Esas reglas se hacen cumplir en dos capas (ver "Sandbox de Claude Code"). Son una **barrera de apoyo, no una garantía**, y la regla de arriba aplica igual.
 - Variantes del `.env` permitidas: `.env.local`, `.env.desarrollo`, `.env.produccion` y `.env.validacion`. Una variante con otro nombre no queda cubierta por la negación hasta que se agregue a `.claude/settings.json`.

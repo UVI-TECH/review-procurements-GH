@@ -63,7 +63,11 @@
       "Bash(7z *)",
       "Bash(*manage.py dbshell*)",
       "Bash(*manage.py importar_respaldo*)",
-      "Bash(*manage.py restaurar_respaldo*)"
+      "Bash(*manage.py restaurar_respaldo*)",
+      "Bash(*manage.py probar_motor*)",
+      "Bash(*manage.py comparar_con_legado*)",
+      "Bash(*call_command*probar_motor*)",
+      "Bash(*call_command*comparar_con_legado*)"
     ]
   }
 }
