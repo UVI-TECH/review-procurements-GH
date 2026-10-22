@@ -271,3 +271,18 @@ def test_base_migrada_no_tiene_migraciones_pendientes():
     from apps.motor.servicio import hay_migraciones_pendientes
 
     assert not hay_migraciones_pendientes()
+
+
+def test_ilegible_es_diferencia_intencional(legado):
+    """El legado lo mandaba a la API y quedaba como ERROR; el motor nuevo lo señala."""
+    protegido = ResultadoDocumento.ilegible(
+        "eps.pdf", "PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña."
+    )
+    nuevos = [r for r in completos() if r.tipo_detectado != "certificados_eps_afp"] + [protegido]
+    viejos = [a_dict_legado(r) for r in nuevos]
+    assert viejos[-1]["tipo_detectado"] == "ERROR"
+    informe = comparar_profesor("P", viejos, nuevos, catalogo_inicial(), legado)
+    assert informe["motor_nuevo"]["estado"] == "INCOMPLETO"
+    assert informe["motor_nuevo"]["ilegibles"] == ["eps.pdf"]
+    assert "documento_ilegible" in informe["diferencias_intencionales"]
+    assert informe["documentos"][-1]["coincide_tipo"]

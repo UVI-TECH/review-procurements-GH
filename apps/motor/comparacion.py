@@ -47,11 +47,12 @@ def validar_ruta_salida(ruta):
 
 def a_dict_legado(resultado):
     """ResultadoDocumento -> el dict que esperan las funciones del legado."""
-    if resultado.es_error:
+    if resultado.es_error or resultado.es_ilegible:
+        # El legado mandaba a la API también los ilegibles; fallaban y quedaban como ERROR.
         return {
             "tipo_detectado": "ERROR",
             "es_valido": False,
-            "observaciones": resultado.error,
+            "observaciones": resultado.error or resultado.observaciones,
         }
     return {
         "tipo_detectado": resultado.tipo_detectado,
@@ -92,7 +93,11 @@ def _motivos_intencionales(evaluacion, documentos, catalogo):
     motivos = []
     if evaluacion.cedula_ambigua:
         motivos.append("cedula_ambigua")
-    tipos = [catalogo.resolver(d.tipo_detectado) for d in documentos if not d.es_error]
+    tipos = [
+        catalogo.resolver(d.tipo_detectado)
+        for d in documentos
+        if not d.es_error and not d.es_ilegible
+    ]
     codigos = [t.codigo for t in tipos if t is not None]
     if len(codigos) != len(set(codigos)):
         motivos.append("duplicados")
@@ -100,6 +105,8 @@ def _motivos_intencionales(evaluacion, documentos, catalogo):
         motivos.append("otro")
     if evaluacion.errores:
         motivos.append("error_de_analisis")
+    if evaluacion.ilegibles:
+        motivos.append("documento_ilegible")
     return motivos
 
 
@@ -116,6 +123,7 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         "cedula_ambigua": evaluacion.cedula_ambigua,
         "no_reconocidos": [r.nombre_archivo for r in evaluacion.no_reconocidos],
         "errores": [r.error for r in evaluacion.errores],
+        "ilegibles": [r.nombre_archivo for r in evaluacion.ilegibles],
     }
 
     completo = EstadoProfesor.COMPLETO
@@ -137,13 +145,20 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
     documentos = []
     for viejo, nuevo in zip(viejos, revalidados, strict=True):
         tipo_viejo = _tipo(catalogo, viejo.get("tipo_detectado"))
-        tipo_nuevo = "error" if nuevo.es_error else _tipo(catalogo, nuevo.tipo_detectado)
+        if nuevo.es_error:
+            tipo_nuevo = "error"
+        elif nuevo.es_ilegible:
+            tipo_nuevo = "ilegible"
+        else:
+            tipo_nuevo = _tipo(catalogo, nuevo.tipo_detectado)
         documentos.append(
             {
                 "archivo": nuevo.nombre_archivo,
                 "legado": {"tipo": tipo_viejo, "es_valido": bool(viejo.get("es_valido"))},
                 "nuevo": {"tipo": tipo_nuevo, "es_valido": nuevo.es_valido},
-                "coincide_tipo": tipo_viejo == tipo_nuevo,
+                # Un ilegible es el mismo archivo que en el legado falló en la API.
+                "coincide_tipo": tipo_viejo == tipo_nuevo
+                or (tipo_viejo == "error" and tipo_nuevo == "ilegible"),
                 "coincide_es_valido": bool(viejo.get("es_valido")) == nuevo.es_valido,
             }
         )

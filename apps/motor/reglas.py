@@ -115,7 +115,8 @@ class EvaluacionProfesor:
     estado: EstadoProfesor
     faltantes: tuple  # TipoCatalogo obligatorios sin ningún documento
     problemas: tuple  # ResultadoDocumento vigentes e inválidos
-    errores: tuple  # ResultadoDocumento cuyo análisis falló
+    errores: tuple  # ResultadoDocumento cuyo análisis falló (transitorio)
+    ilegibles: tuple  # ResultadoDocumento con un problema permanente del archivo
     no_reconocidos: tuple  # "otro", desconocidos o de un tipo inactivo
     vigentes: dict  # codigo -> ResultadoDocumento que cuenta para ese tipo
     cedula: str | None
@@ -132,7 +133,8 @@ def evaluar_profesor(resultados, catalogo):
     """Estado del profesor según el orden acordado en el ADR 0003."""
     resultados = list(resultados)
     errores = tuple(r for r in resultados if r.es_error)
-    analizados = [r for r in resultados if not r.es_error]
+    ilegibles = tuple(r for r in resultados if r.es_ilegible)
+    analizados = [r for r in resultados if not r.es_error and not r.es_ilegible]
     ambigua = cedula_ambigua(analizados)
 
     por_tipo = {}
@@ -154,7 +156,7 @@ def evaluar_profesor(resultados, catalogo):
 
     if not resultados:
         estado = EstadoProfesor.SIN_DOCUMENTOS
-    elif not faltantes and not problemas and not ambigua:
+    elif not faltantes and not problemas and not ambigua and not ilegibles:
         estado = EstadoProfesor.COMPLETO
     elif errores:
         estado = EstadoProfesor.ERROR
@@ -168,6 +170,7 @@ def evaluar_profesor(resultados, catalogo):
         faltantes=faltantes,
         problemas=problemas,
         errores=errores,
+        ilegibles=ilegibles,
         no_reconocidos=tuple(no_reconocidos),
         vigentes=vigentes,
         cedula=None if ambigua else cedula_modal(analizados),
