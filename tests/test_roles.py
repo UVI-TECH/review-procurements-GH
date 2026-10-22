@@ -25,6 +25,7 @@ PERMISOS_ADMINISTRADOR = (
         "contrataciones.ver_pdf",
         "contrataciones.verificar_profesor",
         "contrataciones.exportar_informes",
+        "contrataciones.cancelar_corrida",
         "cuentas.view_registroauditoria",
         "auth.view_group",
     }
@@ -43,6 +44,7 @@ PERMISOS_REVISOR = {
     "contrataciones.add_revision",
     "contrataciones.view_corrida",
     "contrataciones.add_corrida",
+    "contrataciones.cancelar_corrida",
     "respaldos.view_respaldo",
 }
 
@@ -112,3 +114,7 @@ def test_revisor_no_edita_catalogo_ni_usuarios_ni_ve_auditoria(crear_usuario):
     assert not usuario.has_perm("cuentas.view_usuario")
     assert not usuario.has_perm("cuentas.change_usuario")
     assert not usuario.has_perm("cuentas.view_registroauditoria")
+
+
+def test_consulta_no_cancela_corridas(crear_usuario):
+    assert not crear_usuario(grupo="Consulta").has_perm("contrataciones.cancelar_corrida")

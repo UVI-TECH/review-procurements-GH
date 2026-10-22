@@ -11,15 +11,15 @@ from django.db.migrations.executor import MigrationExecutor
 from .reglas import evaluar_profesor, revalidar_por_cedula
 
 
-def crear_cliente(catalogo):
+def crear_cliente(catalogo, *, inspector=None):
     """Simulado en desarrollo y pruebas; el real solo con MOTOR_SIMULADO=False."""
     if settings.MOTOR_SIMULADO:
         from .simulado import ClienteSimulado
 
-        return ClienteSimulado(catalogo)
+        return ClienteSimulado(catalogo, inspector=inspector)
     from .cliente_claude import ClienteClaude
 
-    return ClienteClaude(catalogo)
+    return ClienteClaude(catalogo, inspector=inspector)
 
 
 def exigir_api_real():

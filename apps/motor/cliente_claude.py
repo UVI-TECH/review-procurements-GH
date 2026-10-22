@@ -12,8 +12,8 @@ import anthropic
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
+from .cliente_base import ClienteBase
 from .esquema import NOMBRE_HERRAMIENTA, construir_herramienta, interpretar_entrada
-from .pdf import ErrorPdf, PdfIlegible, leer_pdf
 from .prompts import construir_contenido, construir_system
 from .resultado import ResultadoDocumento, Uso
 
@@ -53,29 +53,16 @@ def _mensaje_de_error_api(error):
     return "Sin conexión con la API."
 
 
-class ClienteClaude:
-    def __init__(self, catalogo, *, sdk=None, modelo=None):
+class ClienteClaude(ClienteBase):
+    def __init__(self, catalogo, *, sdk=None, modelo=None, inspector=None):
+        super().__init__(catalogo, inspector=inspector)
         # sdk solo se inyecta en pruebas; sin él se crea el cliente real.
         self._sdk = sdk if sdk is not None else _crear_sdk()
         self.modelo = modelo or settings.MODELO_CLAUDE
-        self.catalogo = catalogo
         self._system = construir_system(catalogo)
         self._herramienta = construir_herramienta(catalogo)
 
-    def analizar(self, ruta, profesor):
-        try:
-            pdf = leer_pdf(
-                ruta,
-                max_bytes=settings.MOTOR_MAX_BYTES_PDF,
-                max_paginas=settings.MOTOR_MAX_PAGINAS_PDF,
-            )
-        except PdfIlegible as problema:
-            return ResultadoDocumento.ilegible(
-                ruta.name, str(problema), modificado_en=problema.modificado_en
-            )
-        except ErrorPdf as error:
-            return ResultadoDocumento.con_error(ruta.name, str(error), modelo=self.modelo)
-
+    def _analizar_pdf(self, pdf, nombre_archivo, profesor):
         metadatos = {"modificado_en": pdf.modificado_en, "modelo": self.modelo}
         try:
             respuesta = self._sdk.messages.create(
@@ -88,7 +75,7 @@ class ClienteClaude:
                     {
                         "role": "user",
                         "content": construir_contenido(
-                            base64.standard_b64encode(pdf.datos).decode(), ruta.name, profesor
+                            base64.standard_b64encode(pdf.datos).decode(), nombre_archivo, profesor
                         ),
                     }
                 ],
@@ -96,7 +83,7 @@ class ClienteClaude:
         except anthropic.APIError as error:
             logger.warning("Error de la API: %s", type(error).__name__)
             return ResultadoDocumento.con_error(
-                ruta.name, _mensaje_de_error_api(error), **metadatos
+                nombre_archivo, _mensaje_de_error_api(error), **metadatos
             )
 
         uso = _uso(respuesta)
@@ -111,11 +98,11 @@ class ClienteClaude:
         metadatos["uso"] = uso
         if respuesta.stop_reason == "refusal":
             return ResultadoDocumento.con_error(
-                ruta.name, "El modelo se negó a analizar el documento.", **metadatos
+                nombre_archivo, "El modelo se negó a analizar el documento.", **metadatos
             )
         if respuesta.stop_reason == "max_tokens":
             return ResultadoDocumento.con_error(
-                ruta.name, "La respuesta se cortó por max_tokens.", **metadatos
+                nombre_archivo, "La respuesta se cortó por max_tokens.", **metadatos
             )
         bloque = next(
             (b for b in respuesta.content if b.type == "tool_use" and b.name == NOMBRE_HERRAMIENTA),
@@ -123,8 +110,8 @@ class ClienteClaude:
         )
         if bloque is None:
             return ResultadoDocumento.con_error(
-                ruta.name, "El modelo no usó la herramienta de resultado.", **metadatos
+                nombre_archivo, "El modelo no usó la herramienta de resultado.", **metadatos
             )
         return interpretar_entrada(
-            bloque.input, self.catalogo, nombre_archivo=ruta.name, **metadatos
+            bloque.input, self.catalogo, nombre_archivo=nombre_archivo, **metadatos
         )

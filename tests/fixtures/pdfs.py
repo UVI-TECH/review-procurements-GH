@@ -5,10 +5,12 @@ from pathlib import Path
 from pypdf import PdfWriter
 
 
-def crear_pdf(ruta: Path, paginas: int = 1) -> Path:
+def crear_pdf(ruta: Path, paginas: int = 1, marca: str = "") -> Path:
+    """marca cambia el contenido (y el sha256) sin cambiar el número de páginas."""
     escritor = PdfWriter()
     for _ in range(paginas):
         escritor.add_blank_page(width=612, height=792)
+    escritor.add_metadata({"/Title": marca or ruta.name})
     with ruta.open("wb") as archivo:
         escritor.write(archivo)
     return ruta

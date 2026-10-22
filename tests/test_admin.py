@@ -142,3 +142,22 @@ def test_revisor_no_entra_al_catalogo_para_editar(client, crear_usuario, tipo_me
 
 def test_respaldo_registrado():
     assert Respaldo in admin.site._registry
+
+
+@pytest.mark.parametrize("superusuario", [False, True], ids=["administrador", "superusuario"])
+def test_la_cancelacion_no_se_edita_desde_el_admin(client, crear_usuario, superusuario):
+    """La única vía para cancelar es el comando, que audita (la Fase 4 tendrá su vista)."""
+    from apps.contrataciones.models import Corrida
+
+    usuario = crear_usuario(
+        "admin.prueba", grupo="Administrador", is_staff=True, is_superuser=superusuario
+    )
+    client.force_login(usuario)
+    corrida = Corrida.objects.create(iniciada_por=usuario, alcance=Corrida.Alcance.TODOS)
+    formulario = client.get(_url(Corrida, "change", corrida.pk)).context["adminform"].form
+    for campo in (
+        "cancelacion_solicitada",
+        "cancelacion_solicitada_por",
+        "cancelacion_solicitada_en",
+    ):
+        assert campo not in formulario.fields

@@ -1,41 +1,23 @@
-"""Lectura y validación de un PDF antes de enviarlo a la API.
+"""Validación de un PDF antes de enviarlo a la API.
 
 Los PDFs no son de confianza: los suben los profesores y los generan portales de
-terceros. Por eso el tamaño se revisa antes de abrirlo con pypdf, y cualquier fallo de
-pypdf se convierte en ErrorPdf. El tiempo límite por documento lo pone el worker
-(Fase 3), para que un PDF que cuelgue a pypdf no bloquee la corrida.
+terceros. Por eso el tamaño se revisa antes de abrirlo con pypdf, y la apertura la
+hace un inspector: en proceso (lector_pdf.inspeccionar) o, en el worker, en un proceso
+aparte con tiempo límite (aislamiento.InspectorAislado).
 """
 
-import io
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from pypdf import PasswordType, PdfReader
+from . import lector_pdf
 
 logger = logging.getLogger(__name__)
 
 
-class _AvisosDePypdfEnDebug(logging.Handler):
-    """pypdf avisa con logging.warning cada arreglo que hace a un PDF no conforme (p. ej.
-    "Ignoring wrong pointing object"). Son normales en certificados de portales: se
-    reemiten en DEBUG en este logger, en vez de salir en pantalla.
-    """
-
-    def emit(self, record):
-        logger.debug("pypdf: %s", record.getMessage())
-
-
-_logger_pypdf = logging.getLogger("pypdf")
-if not any(isinstance(h, _AvisosDePypdfEnDebug) for h in _logger_pypdf.handlers):
-    _logger_pypdf.addHandler(_AvisosDePypdfEnDebug())
-_logger_pypdf.propagate = False
-
-
 class ErrorPdf(Exception):
-    """El archivo no se pudo leer del disco (p. ej. OneDrive aún no lo descarga).
-
-    Es transitorio: se resuelve reanalizando.
+    """Fallo transitorio: el archivo no se pudo leer del disco (p. ej. OneDrive aún no lo
+    descarga) o pypdf tardó demasiado en abrirlo. Se resuelve reanalizando.
     """
 
 
@@ -51,26 +33,43 @@ class PdfIlegible(Exception):
 class PdfLeido:
     datos: bytes
     paginas: int
-    modificado_en: datetime
+    modificado_en: datetime | None
 
 
-def leer_pdf(ruta, *, max_bytes, max_paginas):
+def leer_ruta(ruta):
+    """Bytes y fecha de modificación de un archivo local (comandos de validación)."""
     try:
         estado = ruta.stat()
+        return ruta.read_bytes(), datetime.fromtimestamp(estado.st_mtime, tz=UTC)
     except OSError as error:
         raise ErrorPdf(f"No se pudo leer el archivo ({type(error).__name__}).") from None
-    modificado_en = datetime.fromtimestamp(estado.st_mtime, tz=UTC)
-    if estado.st_size > max_bytes:
+
+
+def leer_pdf(datos, *, max_bytes, max_paginas, modificado_en=None, inspector=None):
+    if len(datos) > max_bytes:
         raise PdfIlegible(
-            f"El PDF pesa {estado.st_size / 2**20:.1f} MB y el máximo es "
+            f"El PDF pesa {len(datos) / 2**20:.1f} MB y el máximo es "
             f"{max_bytes / 2**20:.1f} MB: solicitar un archivo más liviano.",
             modificado_en,
         )
     try:
-        datos = ruta.read_bytes()
-    except OSError as error:
-        raise ErrorPdf(f"No se pudo leer el archivo ({type(error).__name__}).") from None
-    paginas = _contar_paginas(datos, modificado_en)
+        paginas, estado, avisos = (inspector or lector_pdf.inspeccionar)(datos)
+    except TimeoutError as error:
+        raise ErrorPdf(str(error)) from None
+    # Avisos como "Ignoring wrong pointing object" son normales en certificados de
+    # portales: van al log en DEBUG, no a la pantalla.
+    for aviso in avisos:
+        logger.debug("pypdf: %s", aviso)
+    if estado == lector_pdf.REQUIERE_CONTRASENA:
+        raise PdfIlegible(
+            "PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña.",
+            modificado_en,
+        )
+    if estado != lector_pdf.OK:
+        raise PdfIlegible(
+            "El archivo no es un PDF válido o está dañado: solicitar un nuevo archivo.",
+            modificado_en,
+        )
     if paginas > max_paginas:
         raise PdfIlegible(
             f"El PDF tiene {paginas} páginas y el máximo es {max_paginas}: "
@@ -80,24 +79,3 @@ def leer_pdf(ruta, *, max_bytes, max_paginas):
     if paginas == 0:
         raise PdfIlegible("El PDF no tiene páginas: solicitar un nuevo archivo.", modificado_en)
     return PdfLeido(datos=datos, paginas=paginas, modificado_en=modificado_en)
-
-
-def _contar_paginas(datos, modificado_en):
-    try:
-        lector = PdfReader(io.BytesIO(datos), strict=False)
-        if lector.is_encrypted:
-            # Muchos certificados oficiales solo traen contraseña de propietario
-            # (restricciones de edición o impresión) y se abren con la de usuario vacía.
-            if lector.decrypt("") == PasswordType.NOT_DECRYPTED:
-                raise PdfIlegible(
-                    "PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña.",
-                    modificado_en,
-                )
-        return len(lector.pages)
-    except PdfIlegible:
-        raise
-    except Exception:  # pypdf lanza muchos tipos ante archivos dañados o maliciosos
-        raise PdfIlegible(
-            "El archivo no es un PDF válido o está dañado: solicitar un nuevo archivo.",
-            modificado_en,
-        ) from None

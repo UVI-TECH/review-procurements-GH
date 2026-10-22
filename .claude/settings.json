@@ -67,7 +67,15 @@
       "Bash(*manage.py probar_motor*)",
       "Bash(*manage.py comparar_con_legado*)",
       "Bash(*call_command*probar_motor*)",
-      "Bash(*call_command*comparar_con_legado*)"
+      "Bash(*call_command*comparar_con_legado*)",
+      "Bash(*manage.py worker*)",
+      "Bash(*manage.py escanear*)",
+      "Bash(*manage.py crear_corrida*)",
+      "Bash(*manage.py cancelar_corrida*)",
+      "Bash(*call_command*worker*)",
+      "Bash(*call_command*escanear*)",
+      "Bash(*call_command*crear_corrida*)",
+      "Bash(*call_command*cancelar_corrida*)"
     ]
   }
 }

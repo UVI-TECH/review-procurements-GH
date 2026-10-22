@@ -45,6 +45,13 @@ class CorridaAdmin(admin.ModelAdmin):
     list_display = ["id", "creada_en", "iniciada_por", "alcance", "estado", "total_documentos"]
     list_filter = ["estado", "alcance"]
     raw_id_fields = ["iniciada_por", "profesor"]
+    # Cancelar solo por el comando cancelar_corrida, que audita (ADR 0004); también
+    # para el superusuario.
+    readonly_fields = [
+        "cancelacion_solicitada",
+        "cancelacion_solicitada_por",
+        "cancelacion_solicitada_en",
+    ]
 
 
 @admin.register(Analisis)

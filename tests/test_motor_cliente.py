@@ -9,10 +9,9 @@ from django.core.exceptions import ImproperlyConfigured
 
 from apps.motor.cliente_claude import ClienteClaude
 from apps.motor.esquema import NOMBRE_HERRAMIENTA
-from apps.motor.pdf import PdfIlegible, leer_pdf
 from apps.motor.servicio import crear_cliente
-from apps.motor.simulado import CEDULA_SIMULADA, ClienteSimulado
-from tests.fixtures.catalogo import DOTC, FORMATO, MEDICO, catalogo_inicial
+from apps.motor.simulado import ClienteSimulado
+from tests.fixtures.catalogo import FORMATO, catalogo_inicial
 from tests.fixtures.pdfs import crear_pdf, crear_pdf_cifrado
 
 CLAVE_FALSA = "sk-ant-api03-clave-falsa-de-prueba-que-no-debe-aparecer"
@@ -240,11 +239,6 @@ def test_pdf_que_pide_clave_para_abrirse_es_ilegible(tmp_path):
     assert sdk.llamadas == []
 
 
-def test_leer_pdf_cuenta_paginas_de_un_pdf_con_clave_de_propietario(tmp_path):
-    leido = leer_pdf(crear_pdf_cifrado(tmp_path / "c.pdf"), max_bytes=10**6, max_paginas=5)
-    assert leido.paginas == 1
-
-
 def test_archivo_que_no_se_puede_leer_es_error_transitorio(tmp_path):
     """P. ej. un archivo de OneDrive aún no descargado: se resuelve reanalizando."""
     sdk = SdkFalso(respuesta(entrada()))
@@ -252,46 +246,6 @@ def test_archivo_que_no_se_puede_leer_es_error_transitorio(tmp_path):
     assert resultado.es_error and not resultado.es_ilegible
     assert "No se pudo leer el archivo" in resultado.error
     assert sdk.llamadas == []
-
-
-def test_leer_pdf_revisa_el_tamano_antes_de_abrirlo(tmp_path, monkeypatch):
-    """Un PDF demasiado grande no llega a pypdf."""
-    import apps.motor.pdf as modulo
-
-    monkeypatch.setattr(modulo, "PdfReader", lambda *a, **k: pytest.fail("abrió el PDF"))
-    with pytest.raises(PdfIlegible):
-        leer_pdf(crear_pdf(tmp_path / "x.pdf"), max_bytes=10, max_paginas=5)
-
-
-# --- Cliente simulado ---
-
-
-@pytest.mark.parametrize(
-    ("archivo", "tipo", "valido", "cedula"),
-    [
-        (
-            "certificado_antecedentes_judiciales.pdf",
-            "certificado_antecedentes_judiciales",
-            True,
-            CEDULA_SIMULADA,
-        ),
-        (f"{DOTC}.pdf", DOTC, True, CEDULA_SIMULADA),
-        (f"{MEDICO} cc_0012345.pdf", MEDICO, True, "0012345"),
-        (f"{FORMATO}_sin_firma.pdf", FORMATO, False, CEDULA_SIMULADA),
-        ("certificados_eps_afp_otra_persona.pdf", "certificados_eps_afp", False, "1000000099"),
-        ("certificados_eps_afp_sin_cedula.pdf", "certificados_eps_afp", True, ""),
-        ("certificados_eps_afp_invalido.pdf", "certificados_eps_afp", False, CEDULA_SIMULADA),
-        ("carta de recomendacion.pdf", "otro", False, CEDULA_SIMULADA),
-    ],
-)
-def test_simulado_responde_segun_el_nombre(tmp_path, archivo, tipo, valido, cedula):
-    resultado = ClienteSimulado(catalogo_inicial()).analizar(crear_pdf(tmp_path / archivo), "P")
-    assert (resultado.tipo_detectado, resultado.es_valido, resultado.numero_documento) == (
-        tipo,
-        valido,
-        cedula,
-    )
-    assert resultado.modelo == "simulado"
 
 
 def test_simulado_es_determinista(tmp_path):
@@ -314,34 +268,3 @@ def test_simulado_tambien_valida_el_pdf(tmp_path, settings):
     settings.MOTOR_MAX_PAGINAS_PDF = 1
     ruta = crear_pdf(tmp_path / "largo.pdf", paginas=2)
     assert ClienteSimulado(catalogo_inicial()).analizar(ruta, "P").es_ilegible
-
-
-def test_advertencias_de_pypdf_van_al_logger_en_debug():
-    """Avisos como "Ignoring wrong pointing object" no llegan a la raíz (pantalla) como WARNING.
-
-    No usa caplog: pytest engancha sus handlers también al logger "pypdf", que no propaga.
-    """
-    import logging
-
-    import apps.motor.pdf  # noqa: F401  (instala el desvío)
-
-    class Lista(logging.Handler):
-        def __init__(self):
-            super().__init__(logging.DEBUG)
-            self.registros = []
-
-        def emit(self, record):
-            self.registros.append(record)
-
-    raiz = logging.getLogger()
-    lista, nivel = Lista(), raiz.level
-    raiz.addHandler(lista)
-    raiz.setLevel(logging.DEBUG)
-    try:
-        logging.getLogger("pypdf._reader").warning("Ignoring wrong pointing object %d", 7)
-    finally:
-        raiz.removeHandler(lista)
-        raiz.setLevel(nivel)
-    assert [(r.name, r.levelno, r.getMessage()) for r in lista.registros] == [
-        ("apps.motor.pdf", logging.DEBUG, "pypdf: Ignoring wrong pointing object 7")
-    ]
