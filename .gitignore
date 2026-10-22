@@ -10,6 +10,8 @@
 *.db-journal
 *.db-wal
 *.db-shm
+worker.lock
+worker.pid
 /respaldos/
 *.zip
 

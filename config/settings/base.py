@@ -63,9 +63,38 @@ TEMPLATES = [
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": Path(env.str("RUTA_BASE_DATOS", default=str(BASE_DIR / "revision.db"))),
+        # Vacía en el .env (como en .env.example) = valor por defecto.
+        "NAME": Path(env.str("RUTA_BASE_DATOS", default="") or BASE_DIR / "revision.db"),
+        # El web y el worker escriben a la vez: WAL deja leer mientras otro escribe,
+        # timeout espera al bloqueo en vez de fallar, e IMMEDIATE toma el bloqueo de
+        # escritura al empezar la transacción (evita "database is locked" a mitad).
+        "OPTIONS": {
+            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+            "transaction_mode": "IMMEDIATE",
+            "timeout": 20,
+        },
     }
 }
+
+# Carpeta de Contrataciones (OneDrive sincronizado), con una subcarpeta por profesor.
+_carpeta = env.str("CARPETA_CONTRATACIONES", default="")
+CARPETA_CONTRATACIONES = Path(_carpeta) if _carpeta else None
+
+# La base nunca va dentro de una carpeta sincronizada: OneDrive la corrompería con el
+# modo WAL activo. Solo los respaldos (Fase 6) van a OneDrive.
+if CARPETA_CONTRATACIONES and (
+    Path(DATABASES["default"]["NAME"]).resolve().is_relative_to(CARPETA_CONTRATACIONES.resolve())
+):
+    raise ImproperlyConfigured(
+        "RUTA_BASE_DATOS no puede estar dentro de CARPETA_CONTRATACIONES: OneDrive "
+        "corrompería la base de datos. Muévela a una carpeta local (ver .env.example)."
+    )
+
+# Un solo worker por equipo: bloqueo del sistema operativo sobre este archivo (ADR 0004).
+RUTA_BLOQUEO_WORKER = Path(
+    env.str("RUTA_BLOQUEO_WORKER", default="")
+    or Path(DATABASES["default"]["NAME"]).parent / "worker.lock"
+)
 
 AUTH_USER_MODEL = "cuentas.Usuario"
 
@@ -104,6 +133,22 @@ MOTOR_PAUSA_ENTRE_LLAMADAS = 0.5
 # base64 agrega un tercio al tamaño del PDF.
 MOTOR_MAX_BYTES_PDF = 22 * 1024 * 1024
 MOTOR_MAX_PAGINAS_PDF = 100
+# Tiempo límite para abrir un PDF con pypdf en el proceso aislado del worker.
+MOTOR_TIMEOUT_PDF_SEGUNDOS = 30
+# Estimación de costo de crear_corrida --en-seco. Precios por millón de tokens de
+# Haiku 4.5; cámbialos si cambia el modelo o la tarifa. Sin historial, se usa la
+# estimación de tokens por documento.
+MOTOR_PRECIO_ENTRADA_MTOK = env.float("MOTOR_PRECIO_ENTRADA_MTOK", default=1.0)
+MOTOR_PRECIO_SALIDA_MTOK = env.float("MOTOR_PRECIO_SALIDA_MTOK", default=5.0)
+MOTOR_TOKENS_ESTIMADOS_ENTRADA = 4000
+MOTOR_TOKENS_ESTIMADOS_SALIDA = 200
+
+# Escaneo: si en un escaneo desaparece más de esta fracción de las carpetas conocidas,
+# se aborta sin cambiar nada (OneDrive desconectado, carpeta movida). Solo --forzar sigue.
+ESCANEO_MAX_DESAPARECIDAS = 0.20
+
+# Worker: cada cuánto busca corridas pendientes cuando no hay trabajo.
+WORKER_INTERVALO_SEGUNDOS = 5
 
 # Solo pruebas.py lo pone en True; los comandos que gastan tokens se niegan a correr.
 ES_ENTORNO_DE_PRUEBAS = False
