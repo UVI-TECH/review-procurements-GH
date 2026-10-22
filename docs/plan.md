@@ -90,11 +90,11 @@ La lógica de validación se conserva; cambia cómo se llama a la API, dónde se
 
 | Hoy | Módulo nuevo | Cambio |
 | --- | --- | --- |
-| `construir_prompt`, `ESQUEMAS` | `motor/prompts.py` | Se arma desde el catálogo; las instrucciones fijas van en el system prompt con prompt caching |
-| `analizar_pdf` | `motor/cliente_claude.py` | Respuesta por tool use con esquema JSON; desaparece la limpieza de marcas de código |
+| `construir_prompt`, `ESQUEMAS` | `motor/prompts.py`, `motor/esquema.py` | Se arma desde el catálogo; las instrucciones fijas van en el system prompt con `cache_control` (con Haiku 4.5 no alcanza el mínimo cacheable; ver ADR 0003) |
+| `analizar_pdf` | `motor/cliente_claude.py`, `motor/pdf.py` | Respuesta por una herramienta estricta y forzada, validada contra el esquema; desaparece la limpieza de marcas de código. El tamaño y las páginas del PDF se revisan antes de enviar |
 | `analizar_con_reintentos` | `motor/cliente_claude.py` | Reintentos del SDK con espera creciente; respeta límites de velocidad (HTTP 429) |
-| `revalidar_por_cedula`, `cedula_modal`, `norm` | `motor/reglas.py` | Funciones puras con pruebas; la lógica no cambia |
-| `construir_fila`, `fmt*` | `contrataciones/servicios/estado.py` | Estado calculado desde la BD, incluidas las revisiones humanas |
+| `revalidar_por_cedula`, `cedula_modal`, `norm` | `motor/reglas.py` | Funciones puras con pruebas; la lógica solo cambia en las diferencias intencionales del ADR 0003 |
+| `construir_fila`, `fmt*` | `motor/reglas.py` (`evaluar_profesor`) y `contrataciones/servicios/estado.py` | Estado calculado con la regla del documento vigente; en la Fase 4 se suman las revisiones humanas desde la BD |
 | `fila_sin_documentos`, `fila_error` | Estados SIN DOCUMENTOS y ERROR | Dejan de ser filas de Excel |
 | `escribir_excel` | `reportes/excel.py` | Se genera bajo demanda y con filtros; conserva las 17 columnas actuales |
 | `ejecutar` y la GUI tkinter | `corridas/` (worker) y vistas web | Se reemplazan |
@@ -212,7 +212,7 @@ revision-contrataciones/
     └── decisiones/            # registros de decisiones (ADR)
 ```
 
-**Comandos de gestión:** `escanear` (detecta nuevos y modificados), `worker`, `respaldar`, `restaurar_respaldo`, `importar_respaldo`.
+**Comandos de gestión:** `escanear` (detecta nuevos y modificados), `worker`, `respaldar`, `restaurar_respaldo`, `importar_respaldo`. Para validar el motor con la API real (solo John, en su terminal): `probar_motor` y `comparar_con_legado`.
 
 **Fuentes de documentos (`motor/fuentes.py`):** `FuenteCarpetaLocal` ahora; `FuenteGraph` cuando haya servidor, con la misma interfaz.
 
