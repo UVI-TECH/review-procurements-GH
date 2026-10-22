@@ -65,3 +65,33 @@ def test_ruta_de_base_vacia_usa_el_valor_por_defecto():
         text=True,
     )
     assert resultado.stdout.strip() == "revision.db", resultado.stderr
+
+
+def _cargar_produccion(**variables):
+    entorno = {**os.environ, "MOTOR_SIMULADO": "False", "MOTOR_SIMULADO_PAUSA_SEGUNDOS": "0"}
+    entorno.update(variables)
+    return subprocess.run(
+        [sys.executable, "-c", "import config.settings.produccion"],
+        cwd=BASE_DIR,
+        env=entorno,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_produccion_arranca_con_el_motor_real():
+    resultado = _cargar_produccion()
+    assert resultado.returncode == 0, resultado.stderr
+
+
+def test_produccion_se_niega_con_motor_simulado():
+    """En el PC de Gestión Humana daría validaciones falsas sin que nadie lo note."""
+    resultado = _cargar_produccion(MOTOR_SIMULADO="True")
+    assert resultado.returncode != 0
+    assert "MOTOR_SIMULADO" in resultado.stderr
+
+
+def test_produccion_se_niega_con_pausa_simulada():
+    resultado = _cargar_produccion(MOTOR_SIMULADO_PAUSA_SEGUNDOS="0.5")
+    assert resultado.returncode != 0
+    assert "MOTOR_SIMULADO_PAUSA_SEGUNDOS" in resultado.stderr
