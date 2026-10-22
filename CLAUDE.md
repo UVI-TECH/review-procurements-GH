@@ -27,6 +27,12 @@ uv run pre-commit run --all-files
 uv add <paquete> / uv add --dev <paquete> # nunca pip
 ```
 
+Desde Claude Code, el sandbox oculta el `.env`, así que Django no encuentra `DJANGO_SECRET_KEY`. Usa una clave efímera en la misma llamada, igual que CI:
+
+```bash
+export DJANGO_SECRET_KEY=$(uv run python -c "import secrets; print(secrets.token_urlsafe(50))") && uv run pytest
+```
+
 ## Arquitectura
 
 - `config/entorno.py` (`cargar_env()`) carga el `.env` **antes** de elegir `DJANGO_SETTINGS_MODULE`. Lo llaman `manage.py`, `config/wsgi.py` y `base.py`, y no pisa variables que ya estén en el entorno.
@@ -46,9 +52,35 @@ uv add <paquete> / uv add --dev <paquete> # nunca pip
 - **Nunca** pongas datos reales de Gestión Humana en el repositorio: ni PDFs, ni cédulas, ni nombres, ni Excel históricos. Para pruebas usa datos sintéticos en `tests/fixtures/`.
 - En desarrollo y en pruebas se usa el motor simulado (`MOTOR_SIMULADO=True`). Ninguna prueba debe llamar a la API de Anthropic.
 - **Nunca leas ni imprimas el `.env`** ni sus variantes. Tampoco leas bases de datos (`*.db`, `*.sqlite3`) ni respaldos (`*.zip`, `respaldos/`): un respaldo importado contiene datos reales. Para saber qué variables existen, consulta `.env.example`. Si una variable nueva hace falta, agrégala a `.env.example` sin valor y pide al usuario que la complete.
-- `.claude/settings.json` niega leer esos archivos con `Read` y con comandos de Bash comunes (`cat`, `head`, `grep`, `python -c open(...)`, `sqlite3`, `unzip`…). Es una **barrera de apoyo, no una garantía**: los patrones no cubren todas las formas de leer un archivo (por ejemplo, un `grep -r` sin nombrarlo). La regla de arriba aplica igual.
+- Esas reglas se hacen cumplir en dos capas (ver "Sandbox de Claude Code"). Son una **barrera de apoyo, no una garantía**, y la regla de arriba aplica igual.
 - Variantes del `.env` permitidas: `.env.local`, `.env.desarrollo`, `.env.produccion` y `.env.validacion`. Una variante con otro nombre no queda cubierta por la negación hasta que se agregue a `.claude/settings.json`.
 - Los secretos (`DJANGO_SECRET_KEY`, `ANTHROPIC_API_KEY`, `CLAVE_RESPALDO`) salen solo del `.env`, sin valores por defecto en el código.
+- En desarrollo se usa una API key de Anthropic **exclusiva de desarrollo**, nunca la de producción de Gestión Humana.
+
+## Sandbox de Claude Code
+
+`.claude/settings.json` combina dos capas:
+
+1. **Reglas `deny` de permisos.** Revisan el texto de la llamada antes de ejecutarla y cubren la herramienta Read (también bloquea Write y Edit sobre esos archivos) y comandos de Bash que nombran `.env*`, `*.db`, `*.sqlite3`, `*.zip` o `respaldos/` (`cat`, `head`, `grep`, `python -c open(...)`, `sqlite3`, `unzip`…). Coinciden por texto: un comentario que mencione `.env ` también bloquea la llamada.
+2. **Sandbox del sistema operativo** (bubblewrap en Linux). Las mismas rutas `Read(...)` quedan ilegibles para todo comando de Bash y sus procesos hijos, aunque no las nombren (p. ej. `glob('.en*')` + `open()` da `PermissionError`). Tampoco se pueden borrar desde dentro (`Device or resource busy`). `allowUnsandboxedCommands: false` impide que Claude reintente un comando fuera del sandbox.
+
+Lo que quedó permitido y por qué:
+
+| Ajuste | Valor | Motivo |
+| --- | --- | --- |
+| `network.allowedDomains` | `pypi.org`, `files.pythonhosted.org` | `uv sync` / `uv add` |
+| | `github.com` | pre-commit descarga sus hooks desde GitHub |
+| `filesystem.allowWrite` | `~/.cache/uv` | caché de uv, fuera del proyecto |
+| | `~/.cache/pre-commit` | entornos de los hooks y parches temporales de `git commit` |
+| `excludedCommands` | `gh *`, `git push*`, `git fetch*`, `git pull*`, `git ls-remote*` | Su token está en el keyring de GNOME, al que se llega por D-Bus. Abrir el socket D-Bus al sandbox expondría todo el keyring, así que es más estrecho sacar solo estos comandos. Corren sin sandbox, pero las reglas `deny` siguen aplicando a su texto |
+
+Límites conocidos:
+
+- Las negaciones de `respaldos/` van ancladas a la raíz (`./respaldos/**`). Con `**/respaldos/**` el sandbox oculta también el código de `apps/respaldos/`.
+- Dentro del sandbox, `git status` muestra como `??` puntos de montaje que crea el propio sandbox (`.bashrc`, `.gitconfig`, `.idea`, `.claude/agents`…). Haz `git add` con rutas explícitas; nunca `git add -A` ni `git add .`.
+- Una llamada sale del sandbox solo si **todos** sus comandos coinciden con `excludedCommands`. Por eso `gh ... | tail` falla con 401: ejecuta `gh` y `git push` solos, sin pipes, `cd` ni `$(...)`.
+- El sandbox no existe en Windows nativo: allí solo quedan las reglas `deny`. Tampoco aplica a lo que el usuario ejecuta en su propia terminal.
+- Si un comando necesita otra red u otra ruta, avisa qué restricción encontró; ampliar el sandbox lo decide el usuario.
 
 ## CI
 
