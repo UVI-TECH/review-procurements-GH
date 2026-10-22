@@ -122,6 +122,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Dominio
 MOTOR_SIMULADO = env.bool("MOTOR_SIMULADO", default=False)
+# Solo para pruebas y demostraciones: el cliente simulado espera esto por documento.
+# Producción se niega a arrancar si no es 0.
+MOTOR_SIMULADO_PAUSA_SEGUNDOS = env.float("MOTOR_SIMULADO_PAUSA_SEGUNDOS", default=0.0)
 MODO_SOLO_LECTURA = False
 # Mismo id que el legado, para que la comparación sea con el mismo modelo.
 MODELO_CLAUDE = env.str("MODELO_CLAUDE", default="claude-haiku-4-5-20251001")

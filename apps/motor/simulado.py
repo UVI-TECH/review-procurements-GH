@@ -11,6 +11,9 @@ Convenciones (sobre el nombre normalizado, sin .pdf):
 """
 
 import re
+import time
+
+from django.conf import settings
 
 from .cliente_base import ClienteBase
 from .esquema import TIPO_OTRO, interpretar_entrada
@@ -30,6 +33,8 @@ class ClienteSimulado(ClienteBase):
         self._codigos = sorted(catalogo.codigos_reconocidos, key=len, reverse=True)
 
     def _analizar_pdf(self, pdf, nombre_archivo, profesor):
+        if settings.MOTOR_SIMULADO_PAUSA_SEGUNDOS:
+            time.sleep(settings.MOTOR_SIMULADO_PAUSA_SEGUNDOS)
         metadatos = {"modificado_en": pdf.modificado_en, "modelo": self.modelo}
         nombre = norm(nombre_archivo)
         if "error_api" in nombre:

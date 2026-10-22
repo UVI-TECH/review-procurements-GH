@@ -6,12 +6,23 @@ la app, porque con spawn (Windows) el proceso hijo importa este módulo desde ce
 
 import io
 import logging
+import signal
 
 from pypdf import PasswordType, PdfReader
 
 OK = "ok"
 REQUIERE_CONTRASENA = "requiere_contrasena"
 DANADO = "danado"
+
+
+def ignorar_interrupciones():
+    """Initializer del pool: Ctrl+C (y Ctrl+Break en Windows) los maneja solo el padre.
+
+    Si el hijo los recibiera, imprimiría su propio traceback al detener el worker.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, signal.SIG_IGN)
 
 
 class _Avisos(logging.Handler):

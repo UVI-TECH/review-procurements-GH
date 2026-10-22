@@ -9,7 +9,7 @@ no queden procesos python.exe huérfanos.
 
 import multiprocessing
 
-from .lector_pdf import inspeccionar
+from .lector_pdf import ignorar_interrupciones, inspeccionar
 
 
 class InspectorAislado:
@@ -22,7 +22,9 @@ class InspectorAislado:
     def _obtener_pool(self):
         if self._pool is None:
             contexto = multiprocessing.get_context("spawn")
-            self._pool = contexto.Pool(1, maxtasksperchild=self.maxtasksperchild)
+            self._pool = contexto.Pool(
+                1, maxtasksperchild=self.maxtasksperchild, initializer=ignorar_interrupciones
+            )
         return self._pool
 
     def __call__(self, datos):
