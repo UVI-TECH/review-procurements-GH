@@ -44,6 +44,7 @@ uv add <paquete> / uv add --dev <paquete> # nunca pip
 
 - El código y los nombres de dominio van en español (`Profesor`, `Corrida`, `es_valido`, `cargar_env`). Los mensajes de commit pueden ir en inglés.
 - **Nunca** pongas datos reales de Gestión Humana en el repositorio: ni PDFs, ni cédulas, ni nombres, ni Excel históricos. Para pruebas usa datos sintéticos en `tests/fixtures/`.
+- La validación con respaldos reales (`importar_respaldo`, settings `validacion`) se hace en un **clon aparte, fuera de este repositorio** (p. ej. `~/validacion-contrataciones/`), donde **nunca se abre Claude Code**. En este repositorio no se importan respaldos reales.
 - En desarrollo y en pruebas se usa el motor simulado (`MOTOR_SIMULADO=True`). Ninguna prueba debe llamar a la API de Anthropic.
 - **Nunca leas ni imprimas el `.env`** ni sus variantes. Tampoco leas bases de datos (`*.db`, `*.sqlite3`) ni respaldos (`*.zip`, `respaldos/`): un respaldo importado contiene datos reales. Para saber qué variables existen, consulta `.env.example`. Si una variable nueva hace falta, agrégala a `.env.example` sin valor y pide al usuario que la complete.
 - `.claude/settings.json` niega leer esos archivos con `Read` y con comandos de Bash comunes (`cat`, `head`, `grep`, `python -c open(...)`, `sqlite3`, `unzip`…). Es una **barrera de apoyo, no una garantía**: los patrones no cubren todas las formas de leer un archivo (por ejemplo, un `grep -r` sin nombrarlo). La regla de arriba aplica igual.
@@ -59,3 +60,7 @@ uv add <paquete> / uv add --dev <paquete> # nunca pip
 - **pruebas:** en Ubuntu siempre; en Windows solo en pull requests hacia `main` y en push a `main`.
 
 CI genera un `DJANGO_SECRET_KEY` efímero y enmascarado en cada ejecución.
+
+`main` no tiene protección en GitHub, porque la organización está en GitHub Free (ver `docs/decisiones/0001-proteccion-de-main-sin-github-team.md`). El hook `no-commit-to-branch` de pre-commit rechaza los commits directos a `main`: trabaja siempre en una rama y fusiona por PR con CI en verde.
+
+Al agregar un hook o cambiar un `rev` en `.pre-commit-config.yaml`, el usuario ejecuta `uv run pre-commit install-hooks` **en su terminal**. Dentro del sandbox de Claude Code la descarga falla con `Proxy CONNECT aborted`: pre-commit borra `GIT_CONFIG_PARAMETERS`, que es la variable con la que el sandbox le pasa a git la autenticación de su proxy. Con los hooks ya en caché, `git commit` funciona en el sandbox.
