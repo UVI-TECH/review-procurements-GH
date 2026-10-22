@@ -1,0 +1,30 @@
+[project]
+name = "revision-contrataciones"
+version = "0.1.0"
+description = "Revisión de documentos de contratación de Gestión Humana (UNIAJC)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django>=5.2,<5.3",
+    "django-environ>=0.14.0",
+    "waitress>=3.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "pytest-django>=4.14.0",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["legado", "**/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "DJ"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.pruebas"
+testpaths = ["tests"]
+addopts = "-ra"
