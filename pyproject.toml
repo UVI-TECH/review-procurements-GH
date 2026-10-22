@@ -20,6 +20,8 @@ dev = [
 target-version = "py312"
 line-length = 100
 extend-exclude = ["legado", "**/migrations"]
+# Respeta las exclusiones aunque pre-commit pase los archivos uno a uno.
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "DJ"]

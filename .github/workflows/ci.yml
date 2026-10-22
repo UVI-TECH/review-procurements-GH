@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Instalar gitleaks (misma versión que .pre-commit-config.yaml)
+        run: |
+          version=$(grep -A1 'gitleaks/gitleaks' .pre-commit-config.yaml | sed -n 's/.*rev: *v//p')
+          archivo="gitleaks_${version}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
+          cd "$RUNNER_TEMP"
+          curl -sSfLO "$base/$archivo"
+          curl -sSfLO "$base/gitleaks_${version}_checksums.txt"
+          grep " $archivo\$" "gitleaks_${version}_checksums.txt" | sha256sum -c -
+          tar -xzf "$archivo" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Revisar todo el historial
+        run: gitleaks git --redact --verbose .
+
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  pruebas:
+    name: Pruebas (${{ matrix.os }})
+    # Windows solo en PR hacia main y en push a main, para cuidar la cuota de la organización.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Generar DJANGO_SECRET_KEY efímera
+        run: |
+          clave=$(uv run python -c "import secrets; print(secrets.token_urlsafe(50))")
+          echo "::add-mask::$clave"
+          echo "DJANGO_SECRET_KEY=$clave" >> "$GITHUB_ENV"
+
+      - run: uv run python manage.py check
+      - run: uv run pytest
