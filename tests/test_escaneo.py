@@ -244,3 +244,18 @@ def test_comando_explica_el_freno(raiz, tmp_path, settings):
     (raiz / "PROFESOR DOS").rename(tmp_path / "dos")
     with pytest.raises(CommandError, match="--forzar"):
         call_command("escanear")
+
+
+def test_el_escaneo_actualiza_la_huella_si_cambian_los_archivos(raiz):
+    """Así una verificación queda desactualizada aunque aún no haya corrida (ADR 0005)."""
+    escanear(FuenteCarpetaLocal(raiz))
+    uno = Profesor.objects.get(carpeta="PROFESOR UNO")
+    antes = uno.huella_actual
+    assert antes
+    escanear(FuenteCarpetaLocal(raiz))
+    uno.refresh_from_db()
+    assert uno.huella_actual == antes  # sin cambios, la misma huella
+    crear_pdf(raiz / "PROFESOR UNO" / "nuevo.pdf")
+    escanear(FuenteCarpetaLocal(raiz))
+    uno.refresh_from_db()
+    assert uno.huella_actual != antes

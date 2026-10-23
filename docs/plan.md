@@ -73,7 +73,7 @@ Nueve entidades (detalle y motivos en `docs/decisiones/0002-modelo-de-datos-y-ro
 | Profesor | carpeta (única), nombre, cedula (texto, detectada), estado, verificado\_por, verificado\_en, carpeta\_presente | Uno por carpeta. Si la carpeta desaparece, `carpeta_presente=False` y conserva su último estado |
 | Documento | profesor, ruta\_relativa (única por profesor), nombre\_archivo, sha256, tamano, modificado\_en, presente, reintentos\_agotados | Un PDF; el hash evita reanalizar lo que no cambió. Si desaparece se marca `presente=False`; nunca se borra |
 | Analisis | documento, corrida, sha256, modelo, tipo\_detectado, es\_valido, numero\_documento, nombre\_persona, tiene\_firma, datos\_extra (JSON), observaciones, respuesta\_cruda (JSON), tokens\_entrada, tokens\_salida, tokens de caché | Resultado de la IA para un documento. Inmutable. Un fallo transitorio se guarda con `tipo_detectado="error"` y un archivo ilegible con `"ilegible"` |
-| Revision | analisis, usuario, decision (aprobado / rechazado / corregido), tipo\_corregido, comentario, fecha | Decisión humana sobre un análisis. Inmutable: cambiar de opinión crea otra y prevalece la más reciente |
+| Revision | analisis, usuario, decision (aprobado / rechazado / corregido / descartado), tipo\_corregido, comentario, fecha | Decisión humana sobre un análisis. Inmutable: cambiar de opinión crea otra y prevalece la más reciente |
 | Corrida | iniciada\_por, alcance (todos / nuevos y modificados / un profesor) y profesor, estado (pendiente / en proceso / completada / fallida / cancelada), inicio, fin, totales, errores, tokens, latido, cancelación solicitada | Un procesamiento y su progreso |
 | RegistroAuditoria | usuario (nulo si es el sistema), accion, objeto (ContentType + id), detalle (JSON), fecha | Quién vio, aprobó o cambió qué. Solo se agregan filas |
 | Respaldo | fecha, ruta, tamano, sha256, origen, estado | Historial de copias de seguridad |
@@ -230,7 +230,7 @@ Siete fases hasta reemplazar el `.exe`, cada una con un criterio de aceptación 
    - Criterio: pruebas que reproducen los casos actuales (extranjero sin nombre, cédula de otra persona, formato sin firma, DOTC → certificado médico, duplicados). Un mismo PDF real da el mismo resultado que la versión actual.
 3. **Escaneo y corridas.** Escaneo por hash, worker, alcance de corrida, progreso, cancelación y reanudación (decisiones en `docs/decisiones/0004-escaneo-y-corridas.md`).
    - Criterio: una segunda corrida sin cambios no llama a la API; si se cierra la app a mitad, al reanudar no se duplica trabajo.
-4. **Interfaz.** Tablero, detalle con visor de PDF, revisión humana, verificación y auditoría.
+4. **Interfaz.** Tablero, detalle con visor de PDF, revisión humana, verificación y auditoría (4a: `docs/decisiones/0005-revision-humana-e-interfaz.md`; guion de aceptación: `docs/prueba-usabilidad.md`).
    - Criterio: la persona de Gestión Humana completa una revisión sin ayuda, y cada acción queda registrada.
 5. **Informes.** Excel consolidado y Excel de faltantes.
    - Criterio: para la misma carpeta, el consolidado coincide columna a columna con el Excel actual.

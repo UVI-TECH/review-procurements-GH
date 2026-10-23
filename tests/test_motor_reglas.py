@@ -1,5 +1,6 @@
 """Reglas puras del motor: port del legado y diferencias intencionales (ADR 0003)."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -373,3 +374,46 @@ def test_ilegible_no_cuenta_para_la_cedula_ni_se_revalida():
 def test_solo_ilegibles_no_es_sin_documentos():
     _, evaluacion = procesar([ilegible()])
     assert evaluacion.estado == EstadoProfesor.INCOMPLETO
+
+
+# --- Fase 4: cédula confirmada, evidencia y prioridad del revisor ---
+
+
+def test_cedula_confirmada_resuelve_la_ambiguedad():
+    """2 contra 2: con la cédula confirmada, los de la otra cédula quedan inválidos."""
+    docs = completos(cedula="")
+    docs[0] = doc(docs[0].tipo_detectado)
+    docs[1] = doc(docs[1].tipo_detectado)
+    docs[2] = doc(docs[2].tipo_detectado, cedula=OTRA)
+    docs[3] = doc(docs[3].tipo_detectado, cedula=OTRA)
+    catalogo = catalogo_inicial()
+    revalidados = revalidar_por_cedula(docs, catalogo, cedula_confirmada=OTRA)
+    evaluacion = evaluar_profesor(revalidados, catalogo, cedula_confirmada=OTRA)
+    assert not evaluacion.cedula_ambigua
+    assert evaluacion.cedula == OTRA
+    assert [r.es_valido for r in revalidados[:4]] == [False, False, True, True]
+
+
+def test_cedula_confirmada_acepta_formato_de_extranjeria():
+    docs = completos(cedula="0012345")
+    revalidados = revalidar_por_cedula(docs, catalogo_inicial(), cedula_confirmada="E-0012345")
+    assert all(r.es_valido for r in revalidados)
+
+
+def test_la_evidencia_decide_la_modal_y_la_ambiguedad():
+    """Documentos fuera de la evidencia (rechazados) no votan, pero sí se revalidan."""
+    docs = completos(cedula="")
+    docs[0] = doc(docs[0].tipo_detectado)
+    docs[1] = doc(docs[1].tipo_detectado, cedula=OTRA)
+    catalogo = catalogo_inicial()
+    evidencia = [docs[0]]
+    revalidados = revalidar_por_cedula(docs, catalogo, evidencia=evidencia)
+    assert revalidados[1].es_valido is False  # la modal salió solo de la evidencia
+    assert not evaluar_profesor(revalidados, catalogo, evidencia=evidencia).cedula_ambigua
+
+
+def test_el_validado_por_un_revisor_es_el_vigente_aunque_sea_mas_viejo():
+    revisado = replace(doc("certificados_eps_afp", minutos=1), validado_por_revisor=True)
+    mas_nuevo = doc("certificados_eps_afp", minutos=9)
+    _, evaluacion = procesar(completos(certificados_eps_afp=revisado) + [mas_nuevo])
+    assert evaluacion.vigentes["certificados_eps_afp"] == revisado

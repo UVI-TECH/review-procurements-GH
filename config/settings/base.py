@@ -34,6 +34,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Waitress no sirve estáticos: WhiteNoise los sirve, antes del resto de middleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    # CSP estricta y Cache-Control: no-store en toda página (ADR 0005).
+    "apps.comun.middleware.CabecerasDeSeguridad",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -108,6 +112,15 @@ AUTH_PASSWORD_VALIDATORS = [
 # La sesión expira tras 30 minutos de inactividad.
 SESSION_COOKIE_AGE = 30 * 60
 SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "tablero"
+LOGOUT_REDIRECT_URL = "login"
+# HTMX manda el token en la cabecera X-CSRFToken (hx-headers del <body>): la cookie no
+# necesita ser legible desde JavaScript.
+CSRF_COOKIE_HTTPONLY = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 LANGUAGE_CODE = "es-co"
 TIME_ZONE = "America/Bogota"

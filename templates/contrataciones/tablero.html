@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block titulo %}Tablero{% endblock %}
+{% block contenido %}
+<h1>Tablero de profesores</h1>
+
+<ul class="totales" aria-label="Profesores por estado">
+  {% for valor, nombre, cantidad in totales %}
+    <li><a class="total estado-{{ valor|lower }}" href="?estado={{ valor }}"><span class="total-cifra">{{ cantidad }}</span> <span class="total-nombre">{{ nombre }}</span></a></li>
+  {% endfor %}
+</ul>
+
+<form class="filtros" method="get" action="{% url 'tablero' %}"
+      hx-get="{% url 'tablero' %}" hx-target="#resultados" hx-push-url="true"
+      hx-trigger="change, input changed delay:400ms from:#q, submit">
+  <div class="campo campo-ancho">
+    <label for="q">Buscar por nombre{% if puede_ver_detalle %} o cédula{% endif %}</label>
+    <input type="search" id="q" name="q" value="{{ filtros.q }}" autocomplete="off">
+  </div>
+  <div class="campo">
+    <label for="estado">Estado</label>
+    <select id="estado" name="estado">
+      <option value="">Todos</option>
+      {% for valor, nombre in estados %}<option value="{{ valor }}"{% if filtros.estado == valor %} selected{% endif %}>{{ nombre }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="campo">
+    <label for="falta">Le falta</label>
+    <select id="falta" name="falta">
+      <option value="">Cualquier tipo</option>
+      {% for tipo in tipos %}{% if tipo.obligatorio %}<option value="{{ tipo.codigo }}"{% if filtros.falta == tipo.codigo %} selected{% endif %}>{{ tipo.etiqueta }}</option>{% endif %}{% endfor %}
+    </select>
+  </div>
+  <div class="campo">
+    <label for="verificacion">Verificación</label>
+    <select id="verificacion" name="verificacion">
+      <option value="">Cualquiera</option>
+      {% for valor, nombre in verificaciones %}<option value="{{ valor }}"{% if filtros.verificacion == valor %} selected{% endif %}>{{ nombre }}</option>{% endfor %}
+    </select>
+  </div>
+  <fieldset class="casillas">
+    <legend>Mostrar</legend>
+    <div class="campo campo-casilla">
+      <input type="checkbox" id="atencion" name="atencion" value="1"{% if filtros.atencion %} checked{% endif %}>
+      <label for="atencion">Solo los que requieren atención</label>
+    </div>
+    <div class="campo campo-casilla">
+      <input type="checkbox" id="ocultos" name="ocultos" value="1"{% if filtros.ocultos %} checked{% endif %}>
+      <label for="ocultos">También carpetas que ya no están</label>
+    </div>
+  </fieldset>
+  <button type="submit" class="boton">Filtrar</button>
+  <span class="cargando htmx-indicator" aria-hidden="true">Cargando…</span>
+</form>
+
+<div id="resultados" aria-live="polite">
+  {% include "contrataciones/_resultados.html" %}
+</div>
+{% endblock %}

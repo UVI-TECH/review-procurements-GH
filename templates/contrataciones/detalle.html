@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block titulo %}{{ profesor.nombre }}{% endblock %}
+{% block contenido %}
+<p class="migas"><a href="{% url 'tablero' %}">Tablero</a> <span aria-hidden="true">›</span> {{ profesor.nombre }}</p>
+
+<section class="ficha" aria-labelledby="titulo-profesor">
+  <div class="ficha-principal">
+    <h1 id="titulo-profesor">{{ profesor.nombre }}</h1>
+    <p class="nota">Carpeta: {{ profesor.carpeta }}{% if not profesor.carpeta_presente %} · <strong>la carpeta ya no está en OneDrive</strong>{% endif %}</p>
+    <dl class="datos">
+      <div><dt>Estado</dt><dd><span class="insignia estado-{{ profesor.estado|lower }}">{{ profesor.get_estado_display }}</span></dd></div>
+      <div><dt>Cédula</dt><dd class="cedula">
+        {% if profesor.cedula_confirmada %}{{ profesor.cedula_confirmada }} <span class="etiqueta">Confirmada por {{ profesor.cedula_confirmada_por.get_full_name|default:profesor.cedula_confirmada_por.username }}</span>
+        {% elif evaluacion.cedula_ambigua %}<span class="etiqueta etiqueta-atencion">Ambigua: confírmala</span>
+        {% else %}{{ evaluacion.cedula|default:"—" }}{% endif %}
+      </dd></div>
+      <div><dt>Verificación</dt><dd>
+        {% if profesor.verificacion == "vigente" %}<span class="insignia verificacion-vigente">Verificado</span> por {{ profesor.verificado_por.get_full_name|default:profesor.verificado_por.username }}, {{ profesor.verificado_en|date:"j M Y, H:i" }}
+        {% elif profesor.verificacion == "desactualizada" %}<span class="insignia verificacion-desactualizada">Desactualizada</span> Verificado por {{ profesor.verificado_por.get_full_name|default:profesor.verificado_por.username }} el {{ profesor.verificado_en|date:"j M Y, H:i" }}; algo cambió después.
+        {% else %}<span class="insignia verificacion-pendiente">Pendiente</span>{% endif %}
+      </dd></div>
+    </dl>
+    {% if evaluacion.faltantes %}
+      <p class="aviso"><strong>Faltan:</strong> {% for tipo in evaluacion.faltantes %}{{ tipo.etiqueta }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+    {% endif %}
+  </div>
+
+  {% if puede_verificar %}
+  <div class="ficha-acciones">
+    <form method="post" action="{% url 'verificar' profesor.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="boton boton-principal"{% if profesor.estado != "COMPLETO" %} disabled aria-describedby="por-que-no"{% endif %}>Marcar como verificado</button>
+      {% if profesor.estado != "COMPLETO" %}<p id="por-que-no" class="nota">Solo se verifica un profesor COMPLETO.</p>{% endif %}
+    </form>
+    <form method="post" action="{% url 'cedula' profesor.pk %}" class="formulario formulario-linea">
+      {% csrf_token %}
+      <label for="cedula">Confirmar la cédula del profesor</label>
+      <input type="text" id="cedula" name="cedula" inputmode="numeric" maxlength="20" value="{{ profesor.cedula_confirmada|default:evaluacion.cedula|default:'' }}">
+      <button type="submit" class="boton">Confirmar cédula</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<div class="espacio-trabajo">
+  <section class="documentos" aria-labelledby="titulo-documentos">
+    <h2 id="titulo-documentos">Documentos ({{ documentos|length }})</h2>
+    {% if documentos %}
+    <ul class="lista-documentos">
+      {% for d in documentos %}{% with e=d.evaluado %}
+      <li class="documento{% if elegido and elegido.evaluado.documento.pk == e.documento.pk %} documento-elegido{% endif %}">
+        <a href="?documento={{ e.documento.pk }}#panel"
+           hx-get="?documento={{ e.documento.pk }}" hx-target="#panel" hx-swap="outerHTML" hx-push-url="true"
+           {% if elegido and elegido.evaluado.documento.pk == e.documento.pk %}aria-current="true"{% endif %}>
+          <span class="documento-nombre">{{ e.documento.nombre_archivo }}</span>
+          <span class="documento-tipo">{{ d.tipo_efectivo }}</span>
+          {% if d.valido is True %}<span class="insignia semaforo-valido">✓ Válido</span>
+          {% elif d.valido is False %}<span class="insignia semaforo-invalido">✗ {% if e.resultado.es_error %}Error{% elif e.resultado.es_ilegible %}Ilegible{% else %}Inválido{% endif %}</span>
+          {% else %}<span class="insignia">Descartado</span>{% endif %}
+          {% if e.revision %}<span class="etiqueta">Revisado: {{ e.revision.get_decision_display|lower }}</span>{% endif %}
+          {% if e.documento.reintentos_agotados %}<span class="etiqueta etiqueta-atencion">Reintentos agotados</span>{% endif %}
+        </a>
+      </li>
+      {% endwith %}{% endfor %}
+    </ul>
+    {% else %}
+      <p class="vacio">Este profesor no tiene documentos en su carpeta.</p>
+    {% endif %}
+  </section>
+
+  {% include "contrataciones/_panel.html" %}
+</div>
+
+<details class="historial">
+  <summary><h2>Historial</h2></summary>
+  <h3>Eventos</h3>
+  <ul class="lista-historial">
+    {% for evento in historial.eventos %}
+      <li><time datetime="{{ evento.fecha|date:'c' }}">{{ evento.fecha|date:"j M Y, H:i" }}</time> · {{ evento.usuario|default:"Sistema" }} · {{ evento.accion }}{% if evento.objeto_repr %} · {{ evento.objeto_repr }}{% endif %}</li>
+    {% empty %}<li>Sin eventos.</li>{% endfor %}
+  </ul>
+  <h3>Revisiones</h3>
+  <ul class="lista-historial">
+    {% for r in historial.revisiones %}
+      <li><time datetime="{{ r.fecha|date:'c' }}">{{ r.fecha|date:"j M Y, H:i" }}</time> · {{ r.usuario }} · {{ r.get_decision_display }} · {{ r.analisis.documento.nombre_archivo }}{% if r.tipo_corregido %} → {{ r.tipo_corregido.etiqueta }}{% endif %}{% if r.comentario %} · «{{ r.comentario }}»{% endif %}</li>
+    {% empty %}<li>Sin revisiones.</li>{% endfor %}
+  </ul>
+  <h3>Análisis</h3>
+  <ul class="lista-historial">
+    {% for a in historial.analisis %}
+      <li><time datetime="{{ a.creado_en|date:'c' }}">{{ a.creado_en|date:"j M Y, H:i" }}</time> · corrida {{ a.corrida_id }} · {{ a.documento.nombre_archivo }} · {{ a.tipo_detectado|default:"—" }} · {% if a.es_valido %}válido{% else %}inválido{% endif %}</li>
+    {% empty %}<li>Sin análisis.</li>{% endfor %}
+  </ul>
+</details>
+{% endblock %}

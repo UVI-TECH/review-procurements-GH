@@ -7,6 +7,12 @@ from .base import MOTOR_SIMULADO, MOTOR_SIMULADO_PAUSA_SEGUNDOS
 
 DEBUG = False
 
+# WhiteNoise sirve los estáticos recolectados (collectstatic), comprimidos y con hash.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
 # Un motor simulado aquí daría validaciones falsas sin que nadie lo note.
 if MOTOR_SIMULADO:
     raise ImproperlyConfigured("Producción no arranca con MOTOR_SIMULADO=True.")

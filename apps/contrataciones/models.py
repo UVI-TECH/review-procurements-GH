@@ -127,6 +127,26 @@ class Profesor(models.Model):
     # su historial; las corridas lo saltan. Una carpeta renombrada aparece como profesor
     # nuevo (ADR 0004).
     carpeta_presente = models.BooleanField(default=True, db_index=True)
+    # Cédula confirmada por un revisor: la revalidación compara contra ella en vez de la
+    # modal, y resuelve la ambigüedad (ADR 0005).
+    cedula_confirmada = models.CharField("cédula confirmada", max_length=20, blank=True)
+    cedula_confirmada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cedulas_confirmadas",
+    )
+    cedula_confirmada_en = models.DateTimeField(null=True, blank=True)
+    # Huella de (ruta, sha256, revisión vigente) de los documentos presentes, más la
+    # cédula confirmada. La verificación está vigente si la huella guardada al verificar
+    # coincide con la actual y el estado es COMPLETO (ADR 0005).
+    verificado_huella = models.CharField(max_length=64, blank=True)
+    huella_actual = models.CharField(max_length=64, blank=True)
+    # Lo que el tablero filtra sin recalcular: estado por tipo ("valido", "invalido",
+    # "faltante", "ausente") y si requiere atención.
+    resumen = models.JSONField(default=dict, blank=True)
+    requiere_atencion = models.BooleanField(default=False, db_index=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -145,10 +165,36 @@ class Profesor(models.Model):
                 name="profesor_verificacion_completa",
                 violation_error_message="La verificación necesita usuario y fecha.",
             ),
+            models.CheckConstraint(
+                condition=Q(
+                    cedula_confirmada="",
+                    cedula_confirmada_por__isnull=True,
+                    cedula_confirmada_en__isnull=True,
+                )
+                | (
+                    ~Q(cedula_confirmada="")
+                    & Q(cedula_confirmada_por__isnull=False, cedula_confirmada_en__isnull=False)
+                ),
+                name="profesor_cedula_confirmada_completa",
+                violation_error_message="La cédula confirmada necesita usuario y fecha.",
+            ),
         ]
 
     def __str__(self):
         return self.nombre
+
+    class Verificacion(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        VIGENTE = "vigente", "Verificado"
+        DESACTUALIZADA = "desactualizada", "Desactualizada"
+
+    @property
+    def verificacion(self):
+        if self.verificado_por_id is None:
+            return self.Verificacion.PENDIENTE
+        if self.verificado_huella == self.huella_actual and self.estado == EstadoProfesor.COMPLETO:
+            return self.Verificacion.VIGENTE
+        return self.Verificacion.DESACTUALIZADA
 
 
 class Documento(models.Model):
@@ -294,6 +340,8 @@ class Revision(ModeloInmutable):
         APROBADO = "aprobado", "Aprobado"
         RECHAZADO = "rechazado", "Rechazado"
         CORREGIDO = "corregido", "Corregido"
+        # No cuenta para nada: ni como requisito ni como problema (ADR 0005).
+        DESCARTADO = "descartado", "Descartado"
 
     analisis = models.ForeignKey(Analisis, on_delete=models.PROTECT, related_name="revisiones")
     usuario = models.ForeignKey(
@@ -321,7 +369,9 @@ class Revision(ModeloInmutable):
             models.CheckConstraint(
                 condition=Q(decision="aprobado") | ~Q(comentario=""),
                 name="revision_comentario_si_no_aprobado",
-                violation_error_message="El comentario es obligatorio al rechazar o corregir.",
+                violation_error_message=(
+                    "El comentario es obligatorio al rechazar, corregir o descartar."
+                ),
             ),
             models.CheckConstraint(
                 condition=Q(decision="corregido", tipo_corregido__isnull=False)
@@ -337,7 +387,9 @@ class Revision(ModeloInmutable):
     def clean(self):
         errores = {}
         if self.decision != self.Decision.APROBADO and not self.comentario.strip():
-            errores["comentario"] = "El comentario es obligatorio al rechazar o corregir."
+            errores["comentario"] = (
+                "El comentario es obligatorio al rechazar, corregir o descartar."
+            )
         if self.decision == self.Decision.CORREGIDO:
             if self.tipo_corregido_id is None:
                 errores["tipo_corregido"] = "Indica el tipo correcto del documento."

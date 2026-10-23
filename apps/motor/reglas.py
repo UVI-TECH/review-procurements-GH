@@ -55,21 +55,28 @@ def cedula_ambigua(resultados):
     return len(mas_comunes) == 2 and mas_comunes[0][1] == mas_comunes[1][1]
 
 
-def revalidar_por_cedula(resultados, catalogo):
-    """Cruza cada documento contra la cédula del profesor (la más frecuente del conjunto).
+def revalidar_por_cedula(resultados, catalogo, *, cedula_confirmada=None, evidencia=None):
+    """Cruza cada documento contra la cédula del profesor.
 
-    Identidad por cédula, no por nombre: corrige falsos inválidos por falta de nombre y
-    marca como inválidos los documentos cuya cédula pertenece a otra persona. Si la
-    cédula es ambigua no cambia ninguna validez; solo lo anota (ADR 0003, diferencia 2).
+    La cédula del profesor es la confirmada por un revisor o, si no hay, la más frecuente
+    de la evidencia (por defecto, todos los resultados; el estado excluye los descartados
+    y rechazados, ADR 0005). Identidad por cédula, no por nombre: corrige falsos
+    inválidos por falta de nombre y marca como inválidos los documentos cuya cédula
+    pertenece a otra persona. Si la cédula es ambigua no cambia ninguna validez; solo lo
+    anota (ADR 0003, diferencia 2).
     """
-    if cedula_ambigua(resultados):
+    evidencia = resultados if evidencia is None else evidencia
+    if cedula_confirmada:
+        modal = solo_digitos(cedula_confirmada)
+        return [_revalidar(r, modal, catalogo) for r in resultados]
+    if cedula_ambigua(evidencia):
         return [
             replace(r, observaciones=OBS_CEDULA_AMBIGUA + r.observaciones)
             if solo_digitos(r.numero_documento)
             else r
             for r in resultados
         ]
-    modal = cedula_modal(resultados)
+    modal = cedula_modal(evidencia)
     if not modal:
         return list(resultados)
     return [_revalidar(r, modal, catalogo) for r in resultados]
@@ -124,18 +131,23 @@ class EvaluacionProfesor:
 
 
 def _clave_vigente(r):
-    """Válido sobre inválido; entre iguales, el más reciente (y el nombre, para desempatar)."""
+    """Validado por un revisor, luego válido según la IA, luego el más reciente (y el
+    nombre, para desempatar)."""
     marca = r.modificado_en.timestamp() if r.modificado_en else float("-inf")
-    return (r.es_valido is True, marca, r.nombre_archivo)
+    return (r.validado_por_revisor, r.es_valido is True, marca, r.nombre_archivo)
 
 
-def evaluar_profesor(resultados, catalogo):
+def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=None):
     """Estado del profesor según el orden acordado en el ADR 0003."""
     resultados = list(resultados)
     errores = tuple(r for r in resultados if r.es_error)
     ilegibles = tuple(r for r in resultados if r.es_ilegible)
     analizados = [r for r in resultados if not r.es_error and not r.es_ilegible]
-    ambigua = cedula_ambigua(analizados)
+    if evidencia is None:
+        evidencia = analizados
+    else:
+        evidencia = [r for r in evidencia if not r.es_error and not r.es_ilegible]
+    ambigua = False if cedula_confirmada else cedula_ambigua(evidencia)
 
     por_tipo = {}
     no_reconocidos = []
@@ -173,6 +185,6 @@ def evaluar_profesor(resultados, catalogo):
         ilegibles=ilegibles,
         no_reconocidos=tuple(no_reconocidos),
         vigentes=vigentes,
-        cedula=None if ambigua else cedula_modal(analizados),
+        cedula=cedula_confirmada or (None if ambigua else cedula_modal(evidencia)),
         cedula_ambigua=ambigua,
     )

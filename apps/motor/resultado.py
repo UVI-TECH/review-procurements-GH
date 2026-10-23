@@ -36,6 +36,8 @@ class ResultadoDocumento:
     datos_extra: dict = field(default_factory=dict)
     observaciones: str = ""
     error: str = ""
+    # Un revisor lo aprobó o corrigió: es el vigente de su tipo antes que el de la IA.
+    validado_por_revisor: bool = False
     modificado_en: datetime | None = None
     modelo: str = ""
     uso: Uso = field(default_factory=Uso)
