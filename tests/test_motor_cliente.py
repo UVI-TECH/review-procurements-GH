@@ -268,3 +268,18 @@ def test_simulado_tambien_valida_el_pdf(tmp_path, settings):
     settings.MOTOR_MAX_PAGINAS_PDF = 1
     ruta = crear_pdf(tmp_path / "largo.pdf", paginas=2)
     assert ClienteSimulado(catalogo_inicial()).analizar(ruta, "P").es_ilegible
+
+
+def test_pausa_simulada_solo_afecta_al_cliente_simulado(tmp_path, settings, monkeypatch):
+    """Se comprueba la llamada, no el tiempo: el reloj de Windows tiene ~15 ms de resolución."""
+    import time
+
+    pausas = []
+    monkeypatch.setattr(time, "sleep", pausas.append)
+    settings.MOTOR_SIMULADO_PAUSA_SEGUNDOS = 0.3
+    ruta = crear_pdf(tmp_path / "certificados_eps_afp.pdf")
+    ClienteSimulado(catalogo_inicial()).analizar(ruta, "P")
+    assert pausas == [0.3]
+    pausas.clear()
+    cliente(SdkFalso(respuesta(entrada()))).analizar(ruta, "P")
+    assert pausas == []

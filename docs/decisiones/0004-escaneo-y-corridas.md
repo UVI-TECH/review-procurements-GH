@@ -89,12 +89,39 @@ El criterio de aceptación tiene dos partes: una segunda corrida sin cambios no 
   - El pool se cierra de forma explícita al terminar (`close`/`join`), o con `terminate` si hubo un cuelgue o el worker sale por una excepción, para que en Windows no queden procesos `python.exe` huérfanos.
   - La llamada a la API tiene su propio timeout en el SDK.
 
+### Consola y detención (cambio de `fase-3-ajustes`)
+
+En la primera prueba con datos reales, el worker no mostraba nada: no se sabía si trabajaba, estaba colgado o esperaba. Y Ctrl+C dejaba tracebacks del worker y del hijo del pool. Por eso:
+
+- **Mensajes del worker:**
+  - al tomar una corrida (nueva o reanudada): su id, su alcance y el total de documentos;
+  - el progreso por documento con contadores (n/total, errores, tokens acumulados);
+  - un resumen al terminar, cancelar o fallar;
+  - "Sin corridas pendientes; esperando…", una sola vez al entrar en espera.
+- **Privacidad:** los mensajes nunca muestran nombres de profesores ni de archivos.
+- **Ctrl+C:**
+  - El worker lo atrapa, termina el pool y sale con código 0 y el mensaje "Worker detenido. La corrida N se reanudará al volver a iniciar el worker.".
+  - La corrida queda "en proceso", así que se reanuda.
+  - En Windows, Ctrl+Break (y el cierre de la consola) se trata igual.
+  - El hijo del pool ignora SIGINT y SIGBREAK (`initializer` del pool), para que solo el padre maneje la interrupción.
+- **Prueba:** interrumpe un worker real a mitad de una corrida, como subproceso, en Linux y en Windows. Para poder hacerlo, el cliente simulado acepta una pausa por documento (`MOTOR_SIMULADO_PAUSA_SEGUNDOS`, por defecto 0, solo para pruebas y demostraciones). Además, los settings de pruebas aceptan una base en archivo (`RUTA_BASE_DATOS_PRUEBAS`); por defecto sigue en memoria.
+- **Freno en producción:** los settings de `produccion` se niegan a arrancar si `MOTOR_SIMULADO=True` o si `MOTOR_SIMULADO_PAUSA_SEGUNDOS` no es 0. Un motor simulado en el PC de Gestión Humana daría validaciones falsas sin que nadie lo note.
+
 ### SQLite y configuración
 
 - **Escrituras concurrentes:** el web y el worker escriben a la vez, así que SQLite corre en modo WAL, con `busy timeout` de 20 s y transacciones `IMMEDIATE` (desde `OPTIONS` en settings).
 - **Archivos de WAL:** `revision.db-wal` y `revision.db-shm` ya estaban cubiertos por `.gitignore` y por las reglas de lectura negada (`*.db-*`). El `-wal` contiene datos recientes.
 - **La base nunca va dentro de una carpeta sincronizada por OneDrive:** la sincronización con WAL activo puede corromperla, y solo los respaldos van a OneDrive. La app se niega a arrancar si `RUTA_BASE_DATOS` cae dentro de `CARPETA_CONTRATACIONES`.
 - **Rutas desde el archivo de entorno:** `CARPETA_CONTRATACIONES` y `RUTA_BASE_DATOS` salen de ahí, para poder correr la app en un clon de validación separado. Un valor vacío usa el valor por defecto.
+
+## Validación real
+
+La hizo John en el clon de validación, con datos reales:
+
+- Una corrida `todos` se interrumpió a mitad y se reanudó: terminó **completada con 116 documentos**.
+- Una corrida `nuevos_y_modificados` posterior analizó **0 documentos y gastó 0 tokens**. El `--en-seco` previo había estimado **US$ 0,00**.
+
+Con eso se cumple el criterio de aceptación de la fase con datos reales.
 
 ## Consecuencias
 

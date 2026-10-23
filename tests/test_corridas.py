@@ -8,7 +8,7 @@ import pytest
 from django.core.management import CommandError, call_command
 
 from apps.contrataciones.models import Analisis, Corrida, Documento, EstadoProfesor, Profesor
-from apps.corridas.procesamiento import ejecutar_worker
+from apps.corridas.procesamiento import WorkerDetenido, ejecutar_worker
 from apps.corridas.servicios import crear_corrida, documentos_a_analizar, solicitar_cancelacion
 from apps.cuentas.models import RegistroAuditoria
 from apps.motor.aislamiento import InspectorAislado
@@ -395,3 +395,99 @@ def test_cancelar_corrida_exige_el_permiso(raiz, revisor, crear_usuario):
     call_command("cancelar_corrida", str(corrida.pk), "--usuario", "revisor")
     corrida.refresh_from_db()
     assert corrida.estado == Corrida.Estado.CANCELADA
+
+
+# --- Consola del worker y detención limpia ---
+
+
+def test_consola_muestra_corrida_progreso_y_resumen_sin_nombres(raiz, revisor):
+    corrida = crear_corrida(Corrida.Alcance.NUEVOS_Y_MODIFICADOS, revisor)
+    mensajes = []
+    trabajar(raiz, informar=mensajes.append)
+    assert mensajes[0] == f"Corrida {corrida.pk} (nuevos_y_modificados): escaneando la carpeta…"
+    assert mensajes[1] == f"Corrida {corrida.pk}: 12 documentos por analizar."
+    progreso = [m for m in mensajes if " · " in m]
+    assert len(progreso) == 12
+    assert progreso[0].startswith(f"Corrida {corrida.pk} · 1/12 · errores: 0 · tokens:")
+    assert progreso[-1].startswith(f"Corrida {corrida.pk} · 12/12 · errores: 0")
+    assert mensajes[-2].startswith(
+        f"Corrida {corrida.pk} completada: 12/12 documentos, 0 con error"
+    )
+    assert mensajes[-1] == "Sin corridas pendientes."
+    texto = "\n".join(mensajes)
+    assert "PROFESOR" not in texto and ".pdf" not in texto  # sin nombres ni archivos
+
+
+def test_consola_avisa_la_reanudacion(raiz, revisor):
+    corrida = crear_corrida(Corrida.Alcance.TODOS, revisor)
+
+    def morir(n):
+        if n == 5:
+            raise Caida
+
+    ClienteContador.antes_de_analizar = morir
+    with pytest.raises(Caida):
+        trabajar(raiz)
+    ClienteContador.antes_de_analizar = None
+    mensajes = []
+    trabajar(raiz, informar=mensajes.append)
+    assert mensajes[0] == f"Corrida {corrida.pk} (todos) reanudada: escaneando la carpeta…"
+    assert mensajes[1] == f"Corrida {corrida.pk} reanudada: 7 de 12 documentos por analizar."
+    assert any(m.startswith(f"Corrida {corrida.pk} · 12/12") for m in mensajes)
+
+
+def test_mensaje_de_espera_una_sola_vez(raiz):
+    mensajes = []
+
+    def informar(mensaje):
+        mensajes.append(mensaje)
+        if mensaje == "Sin corridas pendientes; esperando…":
+            raise KeyboardInterrupt  # Ctrl+C mientras espera
+
+    with pytest.raises(WorkerDetenido) as detenido:
+        ejecutar_worker(fuente=FuenteCarpetaLocal(raiz), intervalo=0, informar=informar)
+    assert detenido.value.corrida_id is None
+    assert mensajes == ["Sin corridas pendientes; esperando…"]
+
+
+def test_ctrl_c_a_mitad_deja_la_corrida_reanudable_y_cierra_el_pool(raiz, revisor):
+    import multiprocessing
+
+    corrida = crear_corrida(Corrida.Alcance.TODOS, revisor)
+
+    def ctrl_c(n):
+        if n == 3:
+            raise KeyboardInterrupt
+
+    ClienteContador.antes_de_analizar = ctrl_c
+    with pytest.raises(WorkerDetenido) as detenido:
+        trabajar(raiz)
+    assert detenido.value.corrida_id == corrida.pk
+    assert multiprocessing.active_children() == []
+    corrida.refresh_from_db()
+    assert corrida.estado == Corrida.Estado.EN_PROCESO
+    assert corrida.analisis.count() == 3
+
+    ClienteContador.antes_de_analizar = None
+    trabajar(raiz)
+    corrida.refresh_from_db()
+    assert corrida.estado == Corrida.Estado.COMPLETADA
+    assert corrida.analisis.count() == 12
+
+
+@pytest.mark.parametrize(
+    ("corrida_id", "esperado"),
+    [
+        (7, "Worker detenido. La corrida 7 se reanudará al volver a iniciar el worker."),
+        (None, "Worker detenido."),
+    ],
+)
+def test_comando_worker_sale_limpio_al_detenerse(monkeypatch, capsys, corrida_id, esperado):
+    import apps.corridas.management.commands.worker as comando
+
+    def detener(**kwargs):
+        raise WorkerDetenido(corrida_id)
+
+    monkeypatch.setattr(comando, "ejecutar_worker", detener)
+    call_command("worker")
+    assert capsys.readouterr().out.strip() == esperado

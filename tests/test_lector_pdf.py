@@ -124,3 +124,11 @@ def test_cerrar_no_deja_procesos_huerfanos(tmp_path):
     inspector(crear_pdf(tmp_path / "a.pdf").read_bytes())
     inspector.cerrar()
     assert multiprocessing.active_children() == []
+
+
+def test_el_hijo_del_pool_ignora_las_interrupciones():
+    """Ctrl+C (o Ctrl+Break) lo maneja solo el padre: el hijo no imprime tracebacks."""
+    from tests.fixtures import lentos
+
+    with InspectorAislado(timeout=30, funcion=lentos.ignora_interrupciones) as inspector:
+        assert inspector(b"") is True

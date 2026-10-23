@@ -21,3 +21,13 @@ def colgarse_si_marcado(datos):
     from apps.motor.lector_pdf import inspeccionar
 
     return inspeccionar(datos)
+
+
+def ignora_interrupciones(datos):
+    """Corre en el hijo del pool: ¿ignora Ctrl+C (y Ctrl+Break en Windows)?"""
+    import signal
+
+    ignora = signal.getsignal(signal.SIGINT) == signal.SIG_IGN
+    if hasattr(signal, "SIGBREAK"):
+        ignora = ignora and signal.getsignal(signal.SIGBREAK) == signal.SIG_IGN
+    return ignora
