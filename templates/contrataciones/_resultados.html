@@ -6,7 +6,7 @@
   <thead>
     <tr>
       <th scope="col">Profesor</th>
-      <th scope="col">Cédula</th>
+      {% if ve_cedulas %}<th scope="col">Cédula</th>{% endif %}
       <th scope="col">Estado</th>
       <th scope="col">Verificación</th>
       {% for tipo in tipos %}<th scope="col" class="col-tipo"><span class="col-tipo-texto">{{ tipo.etiqueta }}</span></th>{% endfor %}
@@ -20,7 +20,7 @@
         {% if not p.carpeta_presente %}<span class="etiqueta">Carpeta ya no está</span>{% endif %}
         {% if p.requiere_atencion %}<span class="etiqueta etiqueta-atencion">Requiere atención</span>{% endif %}
       </th>
-      <td class="cedula">{{ p.cedula_confirmada|default:p.cedula|default:"—" }}</td>
+      {% if ve_cedulas %}<td class="cedula">{{ p.cedula_confirmada|default:p.cedula|default:"—" }}</td>{% endif %}
       <td><span class="insignia estado-{{ p.estado|lower }}">{{ p.get_estado_display }}</span></td>
       <td><span class="insignia verificacion-{{ p.verificacion }}">{% if p.verificacion == "vigente" %}Verificado{% elif p.verificacion == "desactualizada" %}Desactualizada{% else %}Pendiente{% endif %}</span></td>
       {% for celda in fila.celdas %}

@@ -431,3 +431,17 @@ def test_fuentes_fijadas_y_con_su_licencia(archivo, sha256):
 def test_whitenoise_sirve_los_estaticos(client, ruta):
     respuesta = client.get(f"/static/{ruta}")
     assert respuesta.status_code == 200
+
+
+def test_consulta_no_ve_ni_busca_cedulas(client, consulta, revisor, datos):
+    """ADR 0002: Consulta no ve análisis porque repiten la cédula; tampoco en el tablero."""
+    datos["ana"].refresh_from_db()
+    cedula = datos["ana"].cedula
+    assert cedula
+    html = entrar(client, consulta).get(reverse("tablero")).content.decode()
+    assert cedula not in html
+    assert "Cédula" not in html
+    html = client.get(reverse("tablero"), {"q": cedula}).content.decode()
+    assert "Ana Ejemplo" not in html  # buscar por cédula no revela a quién pertenece
+    html = entrar(client, revisor).get(reverse("tablero"), {"q": cedula}).content.decode()
+    assert "Ana Ejemplo" in html and cedula in html

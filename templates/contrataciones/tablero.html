@@ -13,7 +13,7 @@
       hx-get="{% url 'tablero' %}" hx-target="#resultados" hx-push-url="true"
       hx-trigger="change, input changed delay:400ms from:#q, submit">
   <div class="campo campo-ancho">
-    <label for="q">Buscar por nombre o cédula</label>
+    <label for="q">Buscar por nombre{% if puede_ver_detalle %} o cédula{% endif %}</label>
     <input type="search" id="q" name="q" value="{{ filtros.q }}" autocomplete="off">
   </div>
   <div class="campo">

@@ -73,6 +73,8 @@ def _mensajes_de(error):
 @permission_required("contrataciones.view_profesor", raise_exception=True)
 def tablero(request):
     tipos = list(TipoDocumento.objects.filter(activo=True).order_by("orden", "codigo"))
+    # Consulta no ve cédulas (ADR 0002): ni la columna ni la búsqueda por dígitos.
+    ve_datos_personales = request.user.has_perm("contrataciones.view_analisis")
     codigos = {t.codigo for t in tipos}
     filtros = {
         "q": request.GET.get("q", "").strip(),
@@ -99,7 +101,7 @@ def tablero(request):
         profesores = profesores.filter(requiere_atencion=True)
     if filtros["q"]:
         busqueda = Q(nombre__icontains=filtros["q"]) | Q(carpeta__icontains=filtros["q"])
-        if solo_digitos(filtros["q"]):
+        if ve_datos_personales and solo_digitos(filtros["q"]):
             digitos = solo_digitos(filtros["q"])
             busqueda |= Q(cedula__contains=digitos) | Q(cedula_confirmada__contains=digitos)
         profesores = profesores.filter(busqueda)
@@ -127,7 +129,8 @@ def tablero(request):
         "estados": EstadoProfesor.choices,
         "verificaciones": Profesor.Verificacion.choices,
         "sin_pagina": sin_pagina,
-        "puede_ver_detalle": request.user.has_perm("contrataciones.view_analisis"),
+        "puede_ver_detalle": ve_datos_personales,
+        "ve_cedulas": ve_datos_personales,
     }
     return _responder(
         request, "contrataciones/tablero.html", "contrataciones/_resultados.html", contexto
