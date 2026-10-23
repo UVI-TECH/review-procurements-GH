@@ -31,3 +31,7 @@ RUTA_BLOQUEO_WORKER = Path(
     env.str("RUTA_BLOQUEO_WORKER", default="")
     or Path(tempfile.gettempdir()) / "revision-pruebas-worker.lock"
 )
+
+# Sin collectstatic en pruebas: WhiteNoise sirve directo desde static/.
+STATIC_ROOT = None
+WHITENOISE_USE_FINDERS = True

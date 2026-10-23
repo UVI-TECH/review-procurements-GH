@@ -1,0 +1,53 @@
+<section id="panel" class="panel" aria-labelledby="titulo-panel" tabindex="-1">
+{% if elegido %}{% with e=elegido.evaluado %}
+  <h2 id="titulo-panel">{{ e.documento.nombre_archivo }}</h2>
+
+  <dl class="datos datos-documento">
+    <div><dt>La IA dice</dt><dd>{{ elegido.tipo_ia }}{% if e.analisis %} · {% if e.resultado_ia.es_valido %}válido{% elif e.resultado_ia.es_error %}error{% else %}inválido{% endif %}{% endif %}</dd></div>
+    {% if e.analisis.numero_documento %}<div><dt>Cédula en el documento</dt><dd class="cedula">{{ e.analisis.numero_documento }}</dd></div>{% endif %}
+    {% if e.analisis.nombre_persona %}<div><dt>Nombre en el documento</dt><dd>{{ e.analisis.nombre_persona }}</dd></div>{% endif %}
+    {% if e.resultado_ia.observaciones %}<div><dt>Observaciones</dt><dd>{{ e.resultado_ia.observaciones }}</dd></div>{% endif %}
+    {% if e.resultado_ia.es_error %}<div><dt>Error</dt><dd>{{ e.resultado_ia.error }}</dd></div>{% endif %}
+    <div><dt>Revisión vigente</dt><dd>
+      {% if e.revision %}{{ e.revision.get_decision_display }}{% if e.revision.tipo_corregido %} como «{{ e.revision.tipo_corregido.etiqueta }}»{% endif %} por {{ e.revision.usuario.get_full_name|default:e.revision.usuario.username }}, {{ e.revision.fecha|date:"j M Y, H:i" }}{% if e.revision.comentario %}: «{{ e.revision.comentario }}»{% endif %}
+      {% else %}Sin revisión: cuenta lo que dice la IA.{% endif %}
+    </dd></div>
+  </dl>
+
+  {% if puede_ver_pdf %}
+    <iframe class="visor" src="{% url 'pdf' e.documento.pk %}" title="PDF: {{ e.documento.nombre_archivo }}"></iframe>
+    <p class="nota"><a href="{% url 'pdf' e.documento.pk %}" target="_blank" rel="noopener">Abrir el PDF en otra pestaña</a></p>
+  {% endif %}
+
+  {% if puede_revisar and e.analisis %}
+  <form method="post" action="{% url 'revisar' profesor.pk e.documento.pk %}" class="formulario revision">
+    {% csrf_token %}
+    <fieldset>
+      <legend>Tu decisión sobre este documento</legend>
+      {% if elegido.puede_aprobar %}
+        <label class="opcion"><input type="radio" name="decision" value="aprobado" required> Aprobar <span class="nota">(válido con el tipo que dice la IA)</span></label>
+      {% endif %}
+      <label class="opcion"><input type="radio" name="decision" value="rechazado" required> Rechazar <span class="nota">(no sirve)</span></label>
+      <label class="opcion"><input type="radio" name="decision" value="corregido" required> Corregir el tipo <span class="nota">(es válido, pero de otro tipo)</span></label>
+      <label class="opcion"><input type="radio" name="decision" value="descartado" required> Descartar <span class="nota">(no cuenta para nada: duplicado, irrelevante)</span></label>
+    </fieldset>
+    <label for="tipo_corregido">Tipo correcto (solo al corregir)</label>
+    <select id="tipo_corregido" name="tipo_corregido">
+      <option value="">—</option>
+      {% for tipo in tipos_activos %}<option value="{{ tipo.pk }}">{{ tipo.etiqueta }}</option>{% endfor %}
+    </select>
+    {% if elegido.cedula_ajena %}
+      <p class="aviso aviso-fuerte" id="aviso-cedula">La cédula del documento (<span class="cedula">{{ elegido.cedula_ajena }}</span>) no coincide con la del profesor (<span class="cedula">{{ evaluacion.cedula }}</span>). Para aprobarlo o corregirlo, explica por qué en el comentario.</p>
+    {% endif %}
+    <label for="comentario">Comentario <span class="nota">(obligatorio salvo al aprobar)</span></label>
+    <textarea id="comentario" name="comentario" rows="3"{% if elegido.cedula_ajena %} aria-describedby="aviso-cedula"{% endif %}></textarea>
+    <button type="submit" class="boton boton-principal">Guardar decisión</button>
+  </form>
+  {% elif puede_revisar %}
+    <p class="aviso">Este documento aún no tiene análisis: espera a la próxima corrida.</p>
+  {% endif %}
+{% endwith %}{% else %}
+  <h2 id="titulo-panel">Documento</h2>
+  <p class="vacio">Elige un documento de la lista.</p>
+{% endif %}
+</section>

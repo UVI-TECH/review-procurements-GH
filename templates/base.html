@@ -1,0 +1,41 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Revisión de Contrataciones{% endblock %} · Gestión Humana</title>
+  {# Sin eval, sin <style> ni <script> inyectados y sin guardar páginas en localStorage (ADR 0005). #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "historyCacheSize": 0, "allowScriptTags": false, "selfRequestsOnly": true, "historyRestoreAsHxRequest": false}'>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'vendor/htmx-2.0.11.min.js' %}" integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <a class="saltar" href="#contenido">Saltar al contenido</a>
+  <header class="barra">
+    <p class="marca"><span class="marca-sello" aria-hidden="true">GH</span> Revisión de Contrataciones</p>
+    {% if user.is_authenticated %}
+      <nav aria-label="Principal">
+        <ul class="menu">
+          <li><a href="{% url 'tablero' %}"{% if request.resolver_match.url_name == 'tablero' %} aria-current="page"{% endif %}>Tablero</a></li>
+        </ul>
+      </nav>
+      <form class="sesion" method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <span class="sesion-usuario">{{ user.get_full_name|default:user.username }}</span>
+        <button type="submit" class="boton boton-sutil">Salir</button>
+      </form>
+    {% endif %}
+  </header>
+
+  <main id="contenido" tabindex="-1">
+    {% if messages %}
+      <div class="mensajes" role="status" aria-live="polite">
+        {% for mensaje in messages %}
+          <p class="mensaje mensaje-{{ mensaje.tags }}">{{ mensaje }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% block contenido %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<p class="conteo">{{ pagina.paginator.count }} profesor{{ pagina.paginator.count|pluralize:"es" }}</p>
+{% if filas %}
+<div class="tabla-desplazable" tabindex="0" role="region" aria-label="Profesores y estado de sus documentos">
+<table class="tabla">
+  <caption class="solo-lector">Profesores con su estado y el semáforo de cada tipo de documento</caption>
+  <thead>
+    <tr>
+      <th scope="col">Profesor</th>
+      <th scope="col">Cédula</th>
+      <th scope="col">Estado</th>
+      <th scope="col">Verificación</th>
+      {% for tipo in tipos %}<th scope="col" class="col-tipo"><span class="col-tipo-texto">{{ tipo.etiqueta }}</span></th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for fila in filas %}{% with p=fila.profesor %}
+    <tr{% if not p.carpeta_presente %} class="fila-ausente"{% endif %}>
+      <th scope="row" class="col-profesor">
+        {% if puede_ver_detalle %}<a href="{% url 'detalle' p.pk %}">{{ p.nombre }}</a>{% else %}{{ p.nombre }}{% endif %}
+        {% if not p.carpeta_presente %}<span class="etiqueta">Carpeta ya no está</span>{% endif %}
+        {% if p.requiere_atencion %}<span class="etiqueta etiqueta-atencion">Requiere atención</span>{% endif %}
+      </th>
+      <td class="cedula">{{ p.cedula_confirmada|default:p.cedula|default:"—" }}</td>
+      <td><span class="insignia estado-{{ p.estado|lower }}">{{ p.get_estado_display }}</span></td>
+      <td><span class="insignia verificacion-{{ p.verificacion }}">{% if p.verificacion == "vigente" %}Verificado{% elif p.verificacion == "desactualizada" %}Desactualizada{% else %}Pendiente{% endif %}</span></td>
+      {% for celda in fila.celdas %}
+        <td class="semaforo semaforo-{{ celda.estado }}"><span aria-hidden="true">{{ celda.icono }}</span><span class="solo-lector">{{ celda.tipo.etiqueta }}: {{ celda.texto }}</span></td>
+      {% endfor %}
+    </tr>
+    {% endwith %}{% endfor %}
+  </tbody>
+</table>
+</div>
+{% if pagina.has_other_pages %}
+<nav class="paginacion" aria-label="Páginas">
+  {% if pagina.has_previous %}<a href="?{{ sin_pagina }}{% if sin_pagina %}&amp;{% endif %}pagina={{ pagina.previous_page_number }}" hx-get="?{{ sin_pagina }}{% if sin_pagina %}&amp;{% endif %}pagina={{ pagina.previous_page_number }}" hx-target="#resultados" hx-push-url="true">Anterior</a>{% endif %}
+  <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+  {% if pagina.has_next %}<a href="?{{ sin_pagina }}{% if sin_pagina %}&amp;{% endif %}pagina={{ pagina.next_page_number }}" hx-get="?{{ sin_pagina }}{% if sin_pagina %}&amp;{% endif %}pagina={{ pagina.next_page_number }}" hx-target="#resultados" hx-push-url="true">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<p class="vacio">No hay profesores con estos filtros.</p>
+{% endif %}
