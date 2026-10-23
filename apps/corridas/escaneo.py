@@ -18,6 +18,7 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.contrataciones.models import Documento, Profesor
+from apps.contrataciones.servicios.estado import actualizar_huella
 from apps.cuentas.auditoria import registrar
 from apps.motor.fuentes import ErrorFuente
 
@@ -99,6 +100,7 @@ def _escanear_profesor(fuente, carpeta, presente, resumen):
             )
             resumen.profesores_desaparecidos += 1
             registrar(None, "carpeta_desaparecida", profesor, {"carpeta": carpeta})
+            actualizar_huella(profesor)
         return
 
     if profesor is None:
@@ -111,6 +113,12 @@ def _escanear_profesor(fuente, carpeta, presente, resumen):
         registrar(None, "carpeta_reaparecida", profesor, {"carpeta": carpeta})
 
     existentes = {d.ruta_relativa: d for d in profesor.documentos.all()}
+    cambios_antes = (
+        resumen.documentos_nuevos
+        + resumen.documentos_modificados
+        + resumen.documentos_desaparecidos
+        + resumen.documentos_reaparecidos
+    )
     vistos = set()
     for archivo in fuente.listar_pdfs(carpeta):
         vistos.add(archivo.ruta_relativa)
@@ -152,3 +160,13 @@ def _escanear_profesor(fuente, carpeta, presente, resumen):
             documento.presente = False
             documento.save(update_fields=["presente", "actualizado_en"])
             resumen.documentos_desaparecidos += 1
+
+    # Si cambió el conjunto de archivos, la verificación debe verlo ya (ADR 0005).
+    cambios = (
+        resumen.documentos_nuevos
+        + resumen.documentos_modificados
+        + resumen.documentos_desaparecidos
+        + resumen.documentos_reaparecidos
+    )
+    if cambios != cambios_antes or not profesor.huella_actual:
+        actualizar_huella(profesor)
