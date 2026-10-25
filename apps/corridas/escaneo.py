@@ -5,6 +5,8 @@
   cambió el tamaño o la fecha de modificación.
 - PDF que desaparece → presente=False; si reaparece → presente=True.
 - Carpeta que desaparece → carpeta_presente=False, sin recalcular su estado.
+- Si cambian los archivos de una carpeta presente, se recalcula el estado: un documento
+  nuevo queda pendiente de análisis desde ya, sin esperar al worker (ADR 0005).
 
 Freno de seguridad: si la raíz no existe o está vacía, o si desaparece más de
 ESCANEO_MAX_DESAPARECIDAS de las carpetas conocidas (OneDrive desconectado, carpeta
@@ -18,8 +20,9 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.contrataciones.models import Documento, Profesor
-from apps.contrataciones.servicios.estado import actualizar_huella
+from apps.contrataciones.servicios.estado import actualizar_huella, recalcular_estado
 from apps.cuentas.auditoria import registrar
+from apps.motor.catalogo import cargar_catalogo
 from apps.motor.fuentes import ErrorFuente
 
 
@@ -57,7 +60,7 @@ def escanear(fuente, *, carpeta=None, forzar=False, usuario=None):
 
     resumen = ResumenEscaneo()
     if carpeta is not None:
-        _escanear_profesor(fuente, carpeta, carpeta in presentes, resumen)
+        _escanear_profesor(fuente, carpeta, carpeta in presentes, resumen, cargar_catalogo())
         return resumen
 
     conocidas = set(
@@ -81,15 +84,16 @@ def escanear(fuente, *, carpeta=None, forzar=False, usuario=None):
                 detalle={"desaparecidas": len(desaparecidas), "conocidas": len(conocidas)},
             )
 
+    catalogo = cargar_catalogo()
     for nombre in presentes:
-        _escanear_profesor(fuente, nombre, True, resumen)
+        _escanear_profesor(fuente, nombre, True, resumen, catalogo)
     for nombre in desaparecidas:
-        _escanear_profesor(fuente, nombre, False, resumen)
+        _escanear_profesor(fuente, nombre, False, resumen, catalogo)
     return resumen
 
 
 @transaction.atomic
-def _escanear_profesor(fuente, carpeta, presente, resumen):
+def _escanear_profesor(fuente, carpeta, presente, resumen, catalogo):
     profesor = Profesor.objects.filter(carpeta=carpeta).first()
     if not presente:
         if profesor and profesor.carpeta_presente:
@@ -161,7 +165,8 @@ def _escanear_profesor(fuente, carpeta, presente, resumen):
             documento.save(update_fields=["presente", "actualizado_en"])
             resumen.documentos_desaparecidos += 1
 
-    # Si cambió el conjunto de archivos, la verificación debe verlo ya (ADR 0005).
+    # Si cambió el conjunto de archivos, el estado y la verificación deben verlo ya:
+    # un documento nuevo queda pendiente de análisis (ADR 0005).
     cambios = (
         resumen.documentos_nuevos
         + resumen.documentos_modificados
@@ -169,4 +174,4 @@ def _escanear_profesor(fuente, carpeta, presente, resumen):
         + resumen.documentos_reaparecidos
     )
     if cambios != cambios_antes or not profesor.huella_actual:
-        actualizar_huella(profesor)
+        recalcular_estado(profesor, catalogo)

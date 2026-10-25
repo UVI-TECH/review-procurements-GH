@@ -354,3 +354,38 @@ def test_sin_analisis_conserva_sin_analizar(prof, catalogo):
         modificado_en=timezone.now(),
     )
     assert estado(prof, catalogo) == EstadoProfesor.SIN_ANALIZAR
+
+
+# --- Pendiente de análisis ---
+
+
+def _pendiente(profesor, nombre="nuevo.pdf"):
+    return Documento.objects.create(
+        profesor=profesor,
+        ruta_relativa=f"{profesor.carpeta}/{nombre}",
+        nombre_archivo=nombre,
+        sha256="e" * 64,
+        tamano=1,
+        modificado_en=timezone.now(),
+    )
+
+
+def test_completo_con_un_pendiente_no_es_error_ni_completo(prof, corrida, catalogo):
+    completo(prof, corrida)
+    _pendiente(prof)
+    assert estado(prof, catalogo) == EstadoProfesor.PENDIENTE_ANALISIS
+
+
+def test_pendiente_de_analisis_no_se_puede_verificar(prof, corrida, catalogo, revisor):
+    completo(prof, corrida)
+    _pendiente(prof)
+    with pytest.raises(ValidationError, match="COMPLETO"):
+        verificar_profesor(prof, revisor)
+    prof.refresh_from_db()
+    assert prof.verificado_por is None
+
+
+def test_incompleto_con_pendiente_sigue_incompleto(prof, corrida, catalogo):
+    completo(prof, corrida, **{CODIGOS[0]: None})
+    _pendiente(prof)
+    assert estado(prof, catalogo) == EstadoProfesor.INCOMPLETO

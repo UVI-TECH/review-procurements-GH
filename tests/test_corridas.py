@@ -491,3 +491,23 @@ def test_comando_worker_sale_limpio_al_detenerse(monkeypatch, capsys, corrida_id
     monkeypatch.setattr(comando, "ejecutar_worker", detener)
     call_command("worker")
     assert capsys.readouterr().out.strip() == esperado
+
+
+def test_archivo_nuevo_queda_pendiente_desde_el_escaneo(raiz, revisor):
+    """ADR 0005: el escaneo recalcula el estado; no hay que esperar al worker."""
+    from apps.corridas.escaneo import escanear
+
+    crear_corrida(Corrida.Alcance.TODOS, revisor)
+    trabajar(raiz)
+    uno = Profesor.objects.get(carpeta="PROFESOR UNO")
+    assert uno.estado == EstadoProfesor.COMPLETO
+
+    crear_pdf(raiz / "PROFESOR UNO" / "carta nueva.pdf")
+    escanear(FuenteCarpetaLocal(raiz))
+    uno.refresh_from_db()
+    assert uno.estado == EstadoProfesor.PENDIENTE_ANALISIS
+
+    crear_corrida(Corrida.Alcance.NUEVOS_Y_MODIFICADOS, revisor)
+    trabajar(raiz)
+    uno.refresh_from_db()
+    assert uno.estado == EstadoProfesor.COMPLETO  # el simulado lo da por "otro"

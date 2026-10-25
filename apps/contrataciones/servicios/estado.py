@@ -106,10 +106,8 @@ def evaluar(profesor, catalogo):
     ia = [
         resultado_de_analisis(analisis, documento)
         if analisis
-        else ResultadoDocumento.con_error(
-            documento.nombre_archivo,
-            "Pendiente de análisis.",
-            modificado_en=documento.modificado_en,
+        else ResultadoDocumento.pendiente_de_analisis(
+            documento.nombre_archivo, modificado_en=documento.modificado_en
         )
         for documento, analisis, _ in filas
     ]
@@ -173,8 +171,7 @@ def _resumen(evaluacion, catalogo):
 
 def recalcular_estado(profesor, catalogo):
     evaluacion, evaluados = evaluar(profesor, catalogo)
-    sin_analizar = bool(evaluados) and all(e.analisis is None for e in evaluados)
-    profesor.estado = EstadoProfesor.SIN_ANALIZAR.value if sin_analizar else evaluacion.estado.value
+    profesor.estado = evaluacion.estado.value
     profesor.cedula = evaluacion.cedula or ""
     profesor.huella_actual = calcular_huella(
         profesor, [(e.documento, e.analisis, e.revision) for e in evaluados]
