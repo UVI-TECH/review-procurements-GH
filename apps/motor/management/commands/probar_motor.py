@@ -42,7 +42,10 @@ class Command(BaseCommand):
                 ("Número de documento", resultado.numero_documento),
                 ("Nombre", resultado.nombre_persona),
                 ("Firma", resultado.tiene_firma),
-                ("Datos extra", resultado.datos_extra),
+                ("Fecha de expedición", resultado.fecha_expedicion),
+                ("Cubre", resultado.cubre or "—"),
+                ("Logo oficial", resultado.tiene_logo_oficial),
+                ("Plantilla institucional", resultado.es_plantilla_institucional),
                 ("Observaciones", resultado.observaciones),
             ]
         uso = resultado.uso

@@ -517,3 +517,21 @@ def test_archivo_nuevo_queda_pendiente_desde_el_escaneo(raiz, revisor):
     trabajar(raiz)
     uno.refresh_from_db()
     assert uno.estado == EstadoProfesor.COMPLETO  # el simulado lo da por "otro"
+
+
+def test_el_analisis_guarda_fecha_cobertura_y_logo(raiz, revisor):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    crear_corrida(Corrida.Alcance.TODOS, revisor)
+    trabajar(raiz)
+    afp = Analisis.objects.get(documento__ruta_relativa="PROFESOR UNO/certificado_afp.pdf")
+    assert afp.fecha_expedicion == timezone.localdate() - timedelta(days=3)
+    assert afp.cubre == "afp"
+    assert afp.tiene_logo_oficial is True
+    assert afp.es_plantilla_institucional is None
+    formato = Analisis.objects.get(
+        documento__ruta_relativa="PROFESOR UNO/formato_autorizacion_consulta_inhabilidades.pdf"
+    )
+    assert formato.es_plantilla_institucional is True

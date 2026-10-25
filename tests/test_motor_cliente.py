@@ -57,9 +57,10 @@ def entrada(**cambios):
         "numero_documento": "1000000001",
         "nombre_persona": "Profesor Ficticio",
         "tiene_firma": None,
-        "fecha_emision_eps": None,
-        "fecha_emision_afp": None,
-        "es_certificado_afiliacion": None,
+        "fecha_expedicion": "2026-10-20",
+        "cubre": None,
+        "tiene_logo_oficial": True,
+        "es_plantilla_institucional": None,
         "observaciones": "",
         **cambios,
     }

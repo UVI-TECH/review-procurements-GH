@@ -12,8 +12,10 @@ Convenciones (sobre el nombre normalizado, sin .pdf):
 
 import re
 import time
+from datetime import timedelta
 
 from django.conf import settings
+from django.utils import timezone
 
 from .cliente_base import ClienteBase
 from .esquema import TIPO_OTRO, interpretar_entrada
@@ -65,15 +67,20 @@ class ClienteSimulado(ClienteBase):
         es_valido = not (
             codigo == TIPO_OTRO or sin_firma or "invalido" in nombre or "otra_persona" in nombre
         )
-        es_eps = tipo is not None and tipo.codigo == "certificados_eps_afp"
+        cubre = (
+            {"certificado_eps": "eps", "certificado_afp": "afp"}.get(tipo.codigo) if tipo else None
+        )
+        # Expedido hace pocos días (America/Bogota): vigente.
+        expedicion = timezone.localdate() - timedelta(days=3)
         return {
             "tipo_detectado": codigo,
             "es_valido": es_valido,
             "numero_documento": cedula,
             "nombre_persona": "Persona Ficticia" if "otra_persona" in nombre else "",
             "tiene_firma": (not sin_firma) if exige_firma else None,
-            "fecha_emision_eps": "2026-01-15" if es_eps else None,
-            "fecha_emision_afp": "2026-01-15" if es_eps else None,
-            "es_certificado_afiliacion": True if es_eps else None,
+            "fecha_expedicion": expedicion.isoformat(),
+            "cubre": cubre,
+            "tiene_logo_oficial": True,
+            "es_plantilla_institucional": True if exige_firma else None,
             "observaciones": "Respuesta simulada.",
         }

@@ -33,9 +33,19 @@ PISTAS = {
         "Registro de deudores morosos (REDAM). No trae nombre por diseño oficial: en "
         'nombre_persona escribe "No aplica - documento sin nombre por diseño oficial".'
     ),
-    "certificados_eps_afp": (
-        "Certificado de EPS o AFP, pensión o seguridad social. Llena fecha_emision_eps, "
-        "fecha_emision_afp y es_certificado_afiliacion."
+    "certificado_eps": (
+        "Certificado de afiliación a una EPS (salud). Si el mismo documento certifica "
+        'también el fondo de pensiones, usa este código o certificado_afp con cubre="ambos".'
+    ),
+    "certificado_afp": (
+        "Certificado de afiliación a un fondo de pensiones (AFP), como Colpensiones, "
+        "Porvenir, Protección o Colfondos."
+    ),
+    "resolucion_pension_vejez": (
+        "Certificado o resolución de pensión por vejez: el profesor ya es pensionado."
+    ),
+    "carta_bono_pensional": (
+        "Carta firmada por el profesor sobre su bono pensional (no la expide una entidad)."
     ),
     "certificado_medico_laboral": "Concepto médico ocupacional o certificado médico laboral.",
     "examen_medico_laboral_dotc": (
@@ -70,13 +80,21 @@ aparece ninguna, deja una cadena vacía.
 4. Marca es_valido=false SOLO si: (a) el documento muestra claramente el nombre de una \
 persona DISTINTA del profesor de la carpeta; (b) es de un tipo que no corresponde, \
 incluido "{TIPO_OTRO}"; o (c) en un tipo que exige firma, faltan campos obligatorios como \
-la firma o la identificación.
+la firma o la identificación. NO lo marques inválido por su fecha ni por el logo: la \
+vigencia y el logo los evalúa Gestión Humana con los campos de abajo.
 5. Si no puedes leer el nombre, escribe en nombre_persona una nota breve (por ejemplo \
 "No incluye nombre - identificado por cédula") y NO lo marques inválido por ello.
 6. tiene_firma: true o false en los tipos que exigen firma; null en los demás.
-7. fecha_emision_eps, fecha_emision_afp y es_certificado_afiliacion: solo en certificados \
-EPS/AFP; null en los demás.
-8. observaciones: una frase breve en español con lo que el revisor debe saber."""
+7. fecha_expedicion: la fecha en que se expidió o generó el documento, en formato \
+AAAA-MM-DD. Si no aparece o no la puedes leer con certeza, null; no la inventes ni la \
+deduzcas del nombre del archivo.
+8. cubre: en certificados de EPS o de pensión (incluidas sus alternativas), qué \
+afiliaciones certifica el documento: "eps", "afp" o "ambos". null en los demás tipos.
+9. tiene_logo_oficial: true si se ve el logo de la entidad que expide el documento (como \
+sale al descargarlo con Control + P), false si no se ve, null si no puedes saberlo.
+10. es_plantilla_institucional: solo en el formato de autorización: true si es la \
+plantilla de la UNICAMACHO (con su título y su logo), false si no; null en los demás tipos.
+11. observaciones: una frase breve en español con lo que el revisor debe saber."""
 
 
 def _lista_de_tipos(catalogo):
