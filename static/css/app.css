@@ -782,3 +782,87 @@ legend {
   color: var(--acento);
   font-variant-numeric: tabular-nums;
 }
+
+/* --- Avisos flotantes ("toasts"), ver static/js/app.js --- */
+
+.mensajes {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.mensaje-warning {
+  border-color: var(--faltante);
+  background: var(--faltante-fondo);
+}
+
+.avisos {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  display: grid;
+  gap: 0.5rem;
+  width: min(24rem, calc(100vw - 2rem));
+}
+
+.aviso-flotante {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem 0.75rem 1rem;
+  background: #fff;
+  border-left: 6px solid var(--neutro);
+  box-shadow: 0 10px 30px -10px rgb(27 37 64 / 45%), 0 0 0 1px var(--linea);
+}
+
+.aviso-flotante p {
+  flex: 1;
+  margin: 0.2rem 0 0;
+}
+
+.aviso-success {
+  border-left-color: var(--valido);
+}
+
+.aviso-warning {
+  border-left-color: var(--faltante);
+}
+
+.aviso-error {
+  border-left-color: var(--invalido);
+}
+
+.aviso-cerrar {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--tinta-suave);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.aviso-cerrar:hover {
+  color: var(--tinta);
+}
+
+.aviso-saliendo {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aviso-flotante {
+    animation: aviso-entra 200ms ease-out;
+    transition: opacity 200ms ease-in;
+  }
+
+  @keyframes aviso-entra {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+  }
+}

@@ -495,3 +495,43 @@ def test_consulta_no_ve_enlaces_al_detalle_ni_al_pdf(client, consulta, datos):
     assert "Ana Ejemplo" in html
     assert "/profesores/" not in html
     assert "/pdf/" not in html
+
+
+# --- Avisos ("toasts") ---
+
+
+def test_la_pagina_trae_la_region_de_avisos_y_el_script_propio(client, revisor, datos):
+    html = entrar(client, revisor).get(reverse("tablero")).content.decode()
+    assert 'id="avisos"' in html and 'aria-live="polite"' in html
+    assert 'src="/static/js/app.js"' in html
+    assert client.get("/static/js/app.js").status_code == 200
+
+
+def test_mensaje_en_pagina_completa_queda_en_la_lista_del_servidor(client, revisor, datos):
+    entrar(client, revisor)
+    beto = datos["beto"]  # incompleto: verificarlo da un error
+    client.post(reverse("verificar", args=[beto.pk]))
+    html = client.get(reverse("detalle", args=[beto.pk])).content.decode()
+    assert 'id="avisos-servidor"' in html
+    assert 'data-nivel="error"' in html
+    assert "COMPLETO" in html
+
+
+def test_mensaje_en_respuesta_htmx_viaja_en_hx_trigger(client, revisor, datos):
+    import json
+
+    entrar(client, revisor)
+    beto = datos["beto"]
+    client.post(reverse("verificar", args=[beto.pk]))
+    respuesta = client.get(reverse("tablero"), headers={"HX-Request": "true"})
+    disparo = json.loads(respuesta["HX-Trigger"])
+    assert respuesta["HX-Trigger"].isascii()  # cabecera HTTP: sin tildes crudas
+    [aviso] = disparo["avisos"]
+    assert aviso["nivel"] == "error" and "COMPLETO" in aviso["texto"]
+    # Consumido: no reaparece en la página siguiente.
+    assert 'id="avisos-servidor"' not in client.get(reverse("tablero")).content.decode()
+
+
+def test_sin_mensajes_no_hay_hx_trigger(client, revisor, datos):
+    respuesta = entrar(client, revisor).get(reverse("tablero"), headers={"HX-Request": "true"})
+    assert "HX-Trigger" not in respuesta
