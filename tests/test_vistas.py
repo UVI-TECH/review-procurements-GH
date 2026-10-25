@@ -535,3 +535,15 @@ def test_mensaje_en_respuesta_htmx_viaja_en_hx_trigger(client, revisor, datos):
 def test_sin_mensajes_no_hay_hx_trigger(client, revisor, datos):
     respuesta = entrar(client, revisor).get(reverse("tablero"), headers={"HX-Request": "true"})
     assert "HX-Trigger" not in respuesta
+
+
+def test_encabezados_de_tipo_con_tooltip_accesible_con_teclado(client, revisor, datos):
+    html = entrar(client, revisor).get(reverse("tablero")).content.decode()
+    activos = TipoDocumento.objects.filter(activo=True)
+    for tipo in activos:
+        assert (
+            f'<span class="col-tipo-texto" tabindex="0">{tipo.etiqueta}</span>'
+            f'<span class="tooltip" aria-hidden="true">{tipo.etiqueta}</span>'
+        ) in html
+    css = (BASE_DIR / "static/css/app.css").read_text()
+    assert ".col-tipo:focus-within .tooltip" in css  # no solo :hover

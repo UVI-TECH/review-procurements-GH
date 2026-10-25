@@ -489,6 +489,45 @@ legend {
   text-overflow: ellipsis;
 }
 
+/* Tooltip del encabezado vertical. aria-hidden: el lector de pantalla ya lee el texto
+   completo del encabezado; esto es solo para quien ve el texto recortado. */
+.tooltip {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 50%;
+  z-index: 5;
+  display: none;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--papel);
+  background: var(--tinta);
+  border-radius: var(--radio);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.col-tipo:hover .tooltip,
+.col-tipo:focus-within .tooltip {
+  display: block;
+}
+
+.col-tipo.tooltip-cerrado .tooltip {
+  display: none;
+}
+
+/* Las últimas columnas abren hacia la izquierda para no salirse de la tabla. */
+.col-tipo:nth-last-child(-n + 3) .tooltip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.col-tipo-texto:focus-visible {
+  outline-offset: 0;
+}
+
 .tabla tbody tr:nth-child(even) {
   background: #fdfcf9;
 }

@@ -9,7 +9,8 @@
       {% if ve_cedulas %}<th scope="col">Cédula</th>{% endif %}
       <th scope="col">Estado</th>
       <th scope="col">Verificación</th>
-      {% for tipo in tipos %}<th scope="col" class="col-tipo"><span class="col-tipo-texto">{{ tipo.etiqueta }}</span></th>{% endfor %}
+      {# Texto vertical recortado: el nombre completo se ve al pasar el mouse o con el foco del teclado. #}
+      {% for tipo in tipos %}<th scope="col" class="col-tipo"><span class="col-tipo-texto" tabindex="0">{{ tipo.etiqueta }}</span><span class="tooltip" aria-hidden="true">{{ tipo.etiqueta }}</span></th>{% endfor %}
     </tr>
   </thead>
   <tbody>
