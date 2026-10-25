@@ -9,7 +9,8 @@
       {% if ve_cedulas %}<th scope="col">Cédula</th>{% endif %}
       <th scope="col">Estado</th>
       <th scope="col">Verificación</th>
-      {% for tipo in tipos %}<th scope="col" class="col-tipo"><span class="col-tipo-texto">{{ tipo.etiqueta }}</span></th>{% endfor %}
+      {# Texto vertical recortado: el nombre completo se ve al pasar el mouse o con el foco del teclado. #}
+      {% for tipo in tipos %}<th scope="col" class="col-tipo"><span class="col-tipo-texto" tabindex="0">{{ tipo.etiqueta }}</span><span class="tooltip" aria-hidden="true">{{ tipo.etiqueta }}</span></th>{% endfor %}
     </tr>
   </thead>
   <tbody>
@@ -19,6 +20,7 @@
         {% if puede_ver_detalle %}<a href="{% url 'detalle' p.pk %}">{{ p.nombre }}</a>{% else %}{{ p.nombre }}{% endif %}
         {% if not p.carpeta_presente %}<span class="etiqueta">Carpeta ya no está</span>{% endif %}
         {% if p.requiere_atencion %}<span class="etiqueta etiqueta-atencion">Requiere atención</span>{% endif %}
+        {% if p.por_analizar %}<span class="etiqueta etiqueta-pendiente">{{ p.por_analizar }} pendiente{{ p.por_analizar|pluralize }} de análisis</span>{% endif %}
       </th>
       {% if ve_cedulas %}<td class="cedula">{{ p.cedula_confirmada|default:p.cedula|default:"—" }}</td>{% endif %}
       <td><span class="insignia estado-{{ p.estado|lower }}">{{ p.get_estado_display }}</span></td>

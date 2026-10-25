@@ -42,6 +42,8 @@
   --faltante-fondo: #fbebc8;
   --neutro: #4a5470;
   --neutro-fondo: #ebe6db;
+  --pendiente: #1f4e79;
+  --pendiente-fondo: #e4edf6;
   --error: #5b2a86;
   --error-fondo: #eee6f6;
 
@@ -489,6 +491,45 @@ legend {
   text-overflow: ellipsis;
 }
 
+/* Tooltip del encabezado vertical. aria-hidden: el lector de pantalla ya lee el texto
+   completo del encabezado; esto es solo para quien ve el texto recortado. */
+.tooltip {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 50%;
+  z-index: 5;
+  display: none;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--papel);
+  background: var(--tinta);
+  border-radius: var(--radio);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.col-tipo:hover .tooltip,
+.col-tipo:focus-within .tooltip {
+  display: block;
+}
+
+.col-tipo.tooltip-cerrado .tooltip {
+  display: none;
+}
+
+/* Las últimas columnas abren hacia la izquierda para no salirse de la tabla. */
+.col-tipo:nth-last-child(-n + 3) .tooltip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.col-tipo-texto:focus-visible {
+  outline-offset: 0;
+}
+
 .tabla tbody tr:nth-child(even) {
   background: #fdfcf9;
 }
@@ -528,6 +569,18 @@ legend {
 .semaforo-faltante {
   color: var(--faltante);
   background: var(--faltante-fondo);
+}
+
+.semaforo-pendiente,
+.etiqueta-pendiente {
+  color: var(--pendiente);
+  background: var(--pendiente-fondo);
+  border-color: var(--pendiente);
+}
+
+.aviso-pendiente {
+  border-color: var(--pendiente);
+  background: var(--pendiente-fondo);
 }
 
 .semaforo-ausente,
@@ -689,9 +742,11 @@ legend {
   border-left-color: var(--tinta);
 }
 
-.documento-elegido a {
-  border-left-color: var(--acento);
+/* El elegido se marca con aria-current (lo anuncia el lector) y, a la vista, con color. */
+.documento a[aria-current="true"] {
+  border-left: 6px solid var(--acento);
   background: var(--acento-claro);
+  box-shadow: inset 0 0 0 1px var(--acento);
 }
 
 .documento-nombre {
@@ -760,5 +815,109 @@ legend {
   .htmx-request .htmx-indicator,
   .htmx-request.htmx-indicator {
     transition: opacity 200ms ease-in;
+  }
+}
+
+/* --- Páginas de error --- */
+
+.error-pagina {
+  max-width: 36rem;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: #fff;
+  border-top: 6px solid var(--acento);
+  box-shadow: var(--sombra);
+}
+
+.error-codigo {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--acento);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Avisos flotantes ("toasts"), ver static/js/app.js --- */
+
+.mensajes {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.mensaje-warning {
+  border-color: var(--faltante);
+  background: var(--faltante-fondo);
+}
+
+.avisos {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  display: grid;
+  gap: 0.5rem;
+  width: min(24rem, calc(100vw - 2rem));
+}
+
+.aviso-flotante {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem 0.75rem 1rem;
+  background: #fff;
+  border-left: 6px solid var(--neutro);
+  box-shadow: 0 10px 30px -10px rgb(27 37 64 / 45%), 0 0 0 1px var(--linea);
+}
+
+.aviso-flotante p {
+  flex: 1;
+  margin: 0.2rem 0 0;
+}
+
+.aviso-success {
+  border-left-color: var(--valido);
+}
+
+.aviso-warning {
+  border-left-color: var(--faltante);
+}
+
+.aviso-error {
+  border-left-color: var(--invalido);
+}
+
+.aviso-cerrar {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--tinta-suave);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.aviso-cerrar:hover {
+  color: var(--tinta);
+}
+
+.aviso-saliendo {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aviso-flotante {
+    animation: aviso-entra 200ms ease-out;
+    transition: opacity 200ms ease-in;
+  }
+
+  @keyframes aviso-entra {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
   }
 }

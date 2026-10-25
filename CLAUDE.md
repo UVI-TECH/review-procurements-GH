@@ -22,6 +22,7 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 uv run pytest                             # todas las pruebas
 uv run pytest tests/test_arranque.py::test_check_sin_errores   # una sola prueba
+uv run pytest -m navegador --browser-channel chromium   # Playwright; solo en CI (ver abajo)
 uv run ruff check . && uv run ruff format --check .
 uv run pre-commit run --all-files
 uv add <paquete> / uv add --dev <paquete> # nunca pip
@@ -56,7 +57,7 @@ export DJANGO_SECRET_KEY=$(uv run python -c "import secrets; print(secrets.token
   - `procesamiento.ejecutar_worker()` toma corridas de la base y guarda cada `Analisis` en su propia transacción. Hay un solo worker por equipo (`bloqueo.py`), y `pypdf` corre en un proceso aparte con tiempo límite (`motor/aislamiento.py`). La función del proceso hijo (`motor/lector_pdf.py`) no debe importar Django.
   - El estado de un profesor sale de `contrataciones/servicios/estado.py`: el último `Analisis` útil del sha256 actual de cada documento. Un `Analisis` de tipo `error` no tapa un resultado útil.
   - Los mensajes del worker en consola muestran solo id, alcance y contadores, nunca nombres de profesores ni de archivos. Ctrl+C lanza `WorkerDetenido` y deja la corrida reanudable.
-- Revisión e interfaz (ver `docs/decisiones/0005-revision-humana-e-interfaz.md`): las acciones del revisor están en `contrataciones/servicios/revisiones.py` y el estado con revisiones en `servicios/estado.py`. Toda página lleva CSP estricta y `no-store` (`apps/comun/middleware.py`): nada de scripts ni atributos `style` en línea, ni `hx-on`. HTMX y las fuentes vienen de `static/vendor/`, con hashes fijados por pruebas.
+- Revisión e interfaz (ver `docs/decisiones/0005-revision-humana-e-interfaz.md`): las acciones del revisor están en `contrataciones/servicios/revisiones.py` y el estado con revisiones en `servicios/estado.py`. Toda página lleva CSP estricta y `no-store` (`apps/comun/middleware.py`): nada de scripts ni atributos `style` en línea, ni `hx-on`. HTMX y las fuentes vienen de `static/vendor/`, con hashes fijados por pruebas. El JavaScript propio va en `static/js/app.js` (avisos y tooltips), sin librerías ni `innerHTML`; los mensajes de Django en respuestas HTMX viajan en `HX-Trigger` (`AvisosHtmx`).
   - En pruebas, el worker se ejecuta con `ejecutar_worker(una_vez=True, fuente=..., crear_cliente=...)` y el cliente simulado, sobre carpetas sintéticas en `tmp_path` (`tests/fixtures/carpetas.py`).
 - Los PDFs no son de confianza. Cualquier fallo al leerlos o analizarlos se devuelve como un `ResultadoDocumento`, nunca como una excepción: con `error` si es transitorio (API, red; se reanaliza) o como ilegible si es un problema permanente del archivo (contraseña, dañado, límites), con una observación que dice qué pedir.
 - `AUTH_USER_MODEL = "cuentas.Usuario"` (subclase de `AbstractUser`) existe desde la migración `0001`. Nunca uses `django.contrib.auth.models.User`; usa `get_user_model()` o `settings.AUTH_USER_MODEL`.
@@ -105,10 +106,11 @@ Límites conocidos:
 
 ## CI
 
-`.github/workflows/ci.yml` tiene tres jobs:
+`.github/workflows/ci.yml` tiene cuatro jobs:
 
 - **gitleaks:** revisa el historial completo en todas las ramas. Su versión se lee de `.pre-commit-config.yaml`; si la cambias, cámbiala solo allí.
 - **ruff:** solo en Ubuntu.
+- **navegador:** Playwright con Chromium real (`tests/navegador/`, marcador `navegador`), solo en Ubuntu. Falla ante cualquier violación de CSP o recurso que no carga. `uv run pytest` lo excluye por defecto: dentro del sandbox no se descarga el navegador, y no se amplía la red para eso.
 - **pruebas:** en Ubuntu siempre; en Windows solo en pull requests hacia `main` y en push a `main`.
 
 CI genera un `DJANGO_SECRET_KEY` efímero y enmascarado en cada ejecución.

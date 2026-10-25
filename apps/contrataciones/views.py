@@ -12,7 +12,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.management import CommandError
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -55,6 +56,18 @@ NOMBRE_DE_TIPO = {
 }
 
 
+def _pendientes_de_analisis():
+    """Documentos presentes de cada profesor cuyo sha256 actual aún no tiene Analisis.
+
+    Se calcula al consultar, no se guarda: el escaneo agrega documentos sin recalcular
+    el resumen del profesor, y "pendiente" no debe confundirse con "faltante".
+    """
+    analizado = Analisis.objects.filter(documento=OuterRef("pk"), sha256=OuterRef("sha256"))
+    return Documento.objects.filter(profesor=OuterRef("pk"), presente=True).exclude(
+        Exists(analizado)
+    )
+
+
 def _responder(request, completa, fragmento, contexto):
     plantilla = fragmento if request.headers.get("HX-Request") else completa
     respuesta = render(request, plantilla, contexto)
@@ -82,6 +95,7 @@ def tablero(request):
         "falta": request.GET.get("falta", ""),
         "verificacion": request.GET.get("verificacion", ""),
         "atencion": request.GET.get("atencion") == "1",
+        "pendientes": request.GET.get("pendientes") == "1",
         "ocultos": request.GET.get("ocultos") == "1",
     }
 
@@ -99,6 +113,8 @@ def tablero(request):
         profesores = filtrar_por_verificacion(profesores, filtros["verificacion"])
     if filtros["atencion"]:
         profesores = profesores.filter(requiere_atencion=True)
+    if filtros["pendientes"]:
+        profesores = profesores.filter(Exists(_pendientes_de_analisis()))
     if filtros["q"]:
         busqueda = Q(nombre__icontains=filtros["q"]) | Q(carpeta__icontains=filtros["q"])
         if ve_datos_personales and solo_digitos(filtros["q"]):
@@ -106,6 +122,12 @@ def tablero(request):
             busqueda |= Q(cedula__contains=digitos) | Q(cedula_confirmada__contains=digitos)
         profesores = profesores.filter(busqueda)
 
+    por_analizar = (
+        _pendientes_de_analisis().order_by().values("profesor").annotate(n=Count("pk")).values("n")
+    )
+    profesores = profesores.annotate(
+        por_analizar=Coalesce(Subquery(por_analizar, output_field=IntegerField()), 0)
+    )
     pagina = Paginator(profesores.order_by("nombre", "pk"), POR_PAGINA).get_page(
         request.GET.get("pagina")
     )
@@ -182,6 +204,7 @@ def detalle(request, pk):
                 if e.resultado
                 else "Descartado",
                 "valido": e.resultado.es_valido if e.resultado else None,
+                "pendiente": e.analisis is None,
                 "puede_aprobar": bool(e.analisis)
                 and tipo_ia not in (Analisis.TIPO_ERROR, Analisis.TIPO_ILEGIBLE)
                 and catalogo.resolver(tipo_ia) is not None,
@@ -200,6 +223,7 @@ def detalle(request, pk):
     contexto = {
         "profesor": profesor,
         "evaluacion": evaluacion,
+        "por_analizar": sum(d["pendiente"] for d in documentos),
         "documentos": documentos,
         "elegido": elegido,
         "tipos_activos": TipoDocumento.objects.filter(activo=True).order_by("orden"),
@@ -210,7 +234,7 @@ def detalle(request, pk):
         "puede_ver_pdf": request.user.has_perm("contrataciones.ver_pdf"),
     }
     if request.headers.get("HX-Request") and "documento" in request.GET:
-        respuesta = render(request, "contrataciones/_panel.html", contexto)
+        respuesta = render(request, "contrataciones/_espacio.html", contexto)
         patch_vary_headers(respuesta, ["HX-Request"])
         return respuesta
     return _responder(

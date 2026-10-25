@@ -43,6 +43,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    # Después de MessageMiddleware: en respuestas HTMX, los mensajes van en HX-Trigger.
+    "apps.comun.middleware.AvisosHtmx",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 

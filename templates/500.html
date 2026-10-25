@@ -1,0 +1,24 @@
+{% load static %}<!DOCTYPE html>
+{# Sin herencia ni contexto de la petición: debe mostrarse aunque falle lo demás. #}
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Error de la aplicación · Gestión Humana</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'img/icono.svg' %}" type="image/svg+xml">
+</head>
+<body>
+  <header class="barra">
+    <p class="marca"><span class="marca-sello" aria-hidden="true">GH</span> Revisión de Contrataciones</p>
+  </header>
+  <main id="contenido">
+    <section class="error-pagina" aria-labelledby="titulo-error">
+      <p class="error-codigo" aria-hidden="true">500</p>
+      <h1 id="titulo-error">Algo falló en la aplicación</h1>
+      <p>No es un problema tuyo. Vuelve a intentarlo en un momento; si se repite, avisa a quien administra la aplicación con la hora en que pasó.</p>
+      <p><a class="boton boton-principal" href="/tablero/">Volver al tablero</a></p>
+    </section>
+  </main>
+</body>
+</html>

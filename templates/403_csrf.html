@@ -1,0 +1,4 @@
+{% extends "_error.html" %}
+{% block titulo %}La página caducó{% endblock %}
+{% block contenido %}{% with codigo_error="403" titulo_error="La página caducó" %}{{ block.super }}{% endwith %}{% endblock %}
+{% block explicacion %}<p>El formulario llevaba demasiado tiempo abierto o la sesión cambió. Vuelve a cargar la página y repite la acción: no se guardó nada.</p>{% endblock %}

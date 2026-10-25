@@ -7,7 +7,9 @@
   {# Sin eval, sin <style> ni <script> inyectados y sin guardar páginas en localStorage (ADR 0005). #}
   <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "historyCacheSize": 0, "allowScriptTags": false, "selfRequestsOnly": true, "historyRestoreAsHxRequest": false}'>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'img/icono.svg' %}" type="image/svg+xml">
   <script src="{% static 'vendor/htmx-2.0.11.min.js' %}" integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" defer></script>
+  <script src="{% static 'js/app.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <a class="saltar" href="#contenido">Saltar al contenido</a>
@@ -29,13 +31,17 @@
 
   <main id="contenido" tabindex="-1">
     {% if messages %}
-      <div class="mensajes" role="status" aria-live="polite">
+      {# Sin JavaScript se quedan aquí, visibles; con él, static/js/app.js los pasa a #avisos. #}
+      <ul id="avisos-servidor" class="mensajes">
         {% for mensaje in messages %}
-          <p class="mensaje mensaje-{{ mensaje.tags }}">{{ mensaje }}</p>
+          <li class="mensaje mensaje-{{ mensaje.level_tag }}" data-nivel="{{ mensaje.level_tag }}">{{ mensaje }}</li>
         {% endfor %}
-      </div>
+      </ul>
     {% endif %}
     {% block contenido %}{% endblock %}
   </main>
+
+  {# Fuera de main y presente desde la carga, para que el lector de pantalla la vigile. #}
+  <div id="avisos" class="avisos" role="status" aria-live="polite" aria-label="Avisos"></div>
 </body>
 </html>

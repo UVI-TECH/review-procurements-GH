@@ -80,8 +80,33 @@ Todo debe quedar en la auditoría, y nada debe salir del equipo.
   - Foco visible, enlace para saltar al contenido, etiquetas en todos los campos.
 - **Datos de demostración:** `sembrar_demo` genera unos 30 profesores ficticios ("DEMO …", cédulas que empiezan por 999) en una carpeta vacía y los procesa con el motor simulado. Se niega a correr con el motor real, en producción o sobre una carpeta con contenido.
 
+### No se impide analizar a profesores incompletos
+
+El legado tenía una regla que no analizaba a un profesor hasta que su carpeta estuviera completa. **No se migra:** no hay filtro que impida analizar a un profesor incompleto. Razones:
+
+- Con el procesamiento incremental (ADR 0004), cada archivo se analiza una sola vez por sha256. Analizar temprano no gasta créditos de más: lo ya analizado no se repite cuando llegan los documentos que faltaban.
+- Sin análisis no se sabe qué falta. La carpeta puede tener los nueve archivos y aun así estar incompleta (un documento ilegible, de otro tipo o de otra persona), o tener menos archivos y ya cumplir los obligatorios.
+
+Lo que sí se distingue es el documento **pendiente de análisis**: un documento presente cuyo sha256 actual aún no tiene `Analisis`. Se muestra como tal en el detalle, no como error ni como faltante. El tablero indica cuántos tiene cada profesor y permite filtrar por ellos. Se calcula al consultar, no se guarda, porque el escaneo agrega documentos sin recalcular el resumen. Un documento cuyo único análisis es un error no está pendiente: se muestra como error y se reanaliza.
+
+### Ajustes tras la prueba técnica y el ensayo de usabilidad
+
+- **Páginas de error** 403, 404, 500 y de CSRF propias, en español, con el enlace al tablero. La 500 no hereda de `base.html` ni usa la petición, para mostrarse aunque falle lo demás. La 404 no repite la ruta pedida.
+- **Avisos flotantes ("toasts")** en lugar de los mensajes en la cabecera, con JavaScript propio en `static/js/app.js`:
+  - sin librerías, sin `eval` ni `innerHTML`: el texto entra con `textContent`;
+  - se cierran solos (6 s; 12 s los de error), se pausan mientras el puntero o el foco están encima, y se cierran a mano o con Escape;
+  - una región `aria-live="polite"` presente desde la carga los anuncia;
+  - sin JavaScript, los mensajes quedan visibles en la página.
+  - En una respuesta a HTMX, el middleware `AvisosHtmx` pasa los mensajes pendientes al encabezado `HX-Trigger` como el evento `avisos`, para que un fragmento no los pierda.
+- **Tooltip de los encabezados verticales:** el nombre completo del tipo aparece al pasar el mouse y al recibir el foco del teclado (`:focus-within`), y Escape lo oculta (WCAG 1.4.13). Lleva `aria-hidden`, porque el lector de pantalla ya lee el encabezado completo.
+- **Documento elegido:** la lista y el panel se reemplazan juntos (`_espacio.html`), así que el resaltado (`aria-current` y color) sigue al documento elegido. El `id` del enlace le permite a HTMX conservar el foco.
+- **Pruebas de navegador** con Playwright y Chromium real, solo en CI (job `navegador`):
+  - cubren el login, el tablero, el detalle con el PDF en el iframe y una revisión;
+  - fallan ante cualquier violación de CSP, error de JavaScript, petición fallida o respuesta >= 400.
+  - Localmente se excluyen: el sandbox de Claude Code no tiene acceso a la descarga del navegador, y no se amplía.
+
 ## Consecuencias
 
 - La revisión humana y la verificación quedan trazables. Un "verificado" nunca afirma algo que ya no es cierto.
-- **Pendiente de probar en un navegador real** (no lo detecta CI): la interacción entre la CSP, el iframe y el visor de PDF de Chrome y Edge. Está en la lista de `docs/prueba-usabilidad.md`.
+- **Probado en un navegador real:** la interacción entre la CSP, el iframe y el visor de PDF pasó la prueba técnica manual, y desde los ajustes la revisa en cada PR el job `navegador` de CI (Chromium). Edge queda para la prueba manual de `docs/prueba-usabilidad.md`.
 - **Fase 4b:** pantallas de corridas (lanzar, progreso en vivo, cancelar), auditoría global (solo el Administrador) y el estado de los respaldos.

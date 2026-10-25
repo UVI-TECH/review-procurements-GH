@@ -445,3 +445,202 @@ def test_consulta_no_ve_ni_busca_cedulas(client, consulta, revisor, datos):
     assert "Ana Ejemplo" not in html  # buscar por cédula no revela a quién pertenece
     html = entrar(client, revisor).get(reverse("tablero"), {"q": cedula}).content.decode()
     assert "Ana Ejemplo" in html and cedula in html
+
+
+# --- Páginas de error ---
+
+
+def _texto_de_error(respuesta):
+    html = respuesta.content.decode()
+    assert '<html lang="es"' in html
+    assert 'href="/static/css/app.css"' in html
+    assert 'href="/tablero/"' in html  # enlace para volver
+    return html
+
+
+def test_403_propio_en_espanol(client, consulta, datos):
+    respuesta = entrar(client, consulta).get(reverse("detalle", args=[datos["ana"].pk]))
+    assert respuesta.status_code == 403
+    assert "No tienes permiso" in _texto_de_error(respuesta)
+
+
+def test_404_propio_en_espanol(client, revisor, datos):
+    respuesta = entrar(client, revisor).get("/profesores/999999/")
+    assert respuesta.status_code == 404
+    html = _texto_de_error(respuesta)
+    assert "No encontramos esta página" in html
+    assert "999999" not in html  # no repite la ruta pedida
+
+
+def test_403_de_csrf_propio(revisor, datos):
+    from django.test import Client
+
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(revisor)
+    respuesta = client.post(reverse("verificar", args=[datos["ana"].pk]))
+    assert respuesta.status_code == 403
+    assert "La página caducó" in _texto_de_error(respuesta)
+
+
+def test_500_propio_sin_depender_de_la_peticion(rf):
+    from django.views.defaults import server_error
+
+    respuesta = server_error(rf.get("/"))
+    assert respuesta.status_code == 500
+    assert "Algo falló en la aplicación" in _texto_de_error(respuesta)
+
+
+def test_consulta_no_ve_enlaces_al_detalle_ni_al_pdf(client, consulta, datos):
+    html = entrar(client, consulta).get(reverse("tablero"), {"ocultos": "1"}).content.decode()
+    assert "Ana Ejemplo" in html
+    assert "/profesores/" not in html
+    assert "/pdf/" not in html
+
+
+# --- Avisos ("toasts") ---
+
+
+def test_la_pagina_trae_la_region_de_avisos_y_el_script_propio(client, revisor, datos):
+    html = entrar(client, revisor).get(reverse("tablero")).content.decode()
+    assert 'id="avisos"' in html and 'aria-live="polite"' in html
+    assert 'src="/static/js/app.js"' in html
+    assert client.get("/static/js/app.js").status_code == 200
+
+
+def test_mensaje_en_pagina_completa_queda_en_la_lista_del_servidor(client, revisor, datos):
+    entrar(client, revisor)
+    beto = datos["beto"]  # incompleto: verificarlo da un error
+    client.post(reverse("verificar", args=[beto.pk]))
+    html = client.get(reverse("detalle", args=[beto.pk])).content.decode()
+    assert 'id="avisos-servidor"' in html
+    assert 'data-nivel="error"' in html
+    assert "COMPLETO" in html
+
+
+def test_mensaje_en_respuesta_htmx_viaja_en_hx_trigger(client, revisor, datos):
+    import json
+
+    entrar(client, revisor)
+    beto = datos["beto"]
+    client.post(reverse("verificar", args=[beto.pk]))
+    respuesta = client.get(reverse("tablero"), headers={"HX-Request": "true"})
+    disparo = json.loads(respuesta["HX-Trigger"])
+    assert respuesta["HX-Trigger"].isascii()  # cabecera HTTP: sin tildes crudas
+    [aviso] = disparo["avisos"]
+    assert aviso["nivel"] == "error" and "COMPLETO" in aviso["texto"]
+    # Consumido: no reaparece en la página siguiente.
+    assert 'id="avisos-servidor"' not in client.get(reverse("tablero")).content.decode()
+
+
+def test_sin_mensajes_no_hay_hx_trigger(client, revisor, datos):
+    respuesta = entrar(client, revisor).get(reverse("tablero"), headers={"HX-Request": "true"})
+    assert "HX-Trigger" not in respuesta
+
+
+def test_encabezados_de_tipo_con_tooltip_accesible_con_teclado(client, revisor, datos):
+    html = entrar(client, revisor).get(reverse("tablero")).content.decode()
+    activos = TipoDocumento.objects.filter(activo=True)
+    for tipo in activos:
+        assert (
+            f'<span class="col-tipo-texto" tabindex="0">{tipo.etiqueta}</span>'
+            f'<span class="tooltip" aria-hidden="true">{tipo.etiqueta}</span>'
+        ) in html
+    css = (BASE_DIR / "static/css/app.css").read_text()
+    assert ".col-tipo:focus-within .tooltip" in css  # no solo :hover
+
+
+def test_elegir_documento_por_htmx_mueve_el_resaltado_de_la_lista(client, revisor, datos):
+    import re
+
+    ana = datos["ana"]
+    primero, segundo = ana.documentos.order_by("ruta_relativa")[:2]
+    respuesta = entrar(client, revisor).get(
+        reverse("detalle", args=[ana.pk]),
+        {"documento": segundo.pk},
+        headers={"HX-Request": "true"},
+    )
+    html = respuesta.content.decode()
+    assert html.lstrip().startswith('<div id="espacio"')  # lista y panel, no la página
+    assert "<html" not in html
+    actuales = re.findall(r'<a id="doc-(\d+)"[^>]*aria-current="true"', html)
+    assert actuales == [str(segundo.pk)]
+    assert f'id="doc-{primero.pk}"' in html
+    assert f'src="{reverse("pdf", args=[segundo.pk])}"' in html
+
+
+def test_el_detalle_sin_elegir_resalta_el_primer_documento(client, revisor, datos):
+    import re
+
+    ana = datos["ana"]
+    primero = ana.documentos.order_by("ruta_relativa").first()
+    html = entrar(client, revisor).get(reverse("detalle", args=[ana.pk])).content.decode()
+    assert re.findall(r'<a id="doc-(\d+)"[^>]*aria-current="true"', html) == [str(primero.pk)]
+
+
+# --- Pendientes de análisis ---
+
+
+def _sin_analizar(profesor, nombre="nuevo.pdf", **extra):
+    from django.utils import timezone
+
+    return Documento.objects.create(
+        profesor=profesor,
+        ruta_relativa=f"{profesor.carpeta}/{nombre}",
+        nombre_archivo=nombre,
+        sha256=hashlib.sha256(nombre.encode()).hexdigest(),
+        tamano=10,
+        modificado_en=timezone.now(),
+        **extra,
+    )
+
+
+def test_tablero_cuenta_y_filtra_pendientes_de_analisis(client, revisor, datos):
+    ana, beto = datos["ana"], datos["beto"]
+    _sin_analizar(ana, "nuevo1.pdf")
+    _sin_analizar(ana, "nuevo2.pdf")
+    _sin_analizar(beto, "viejo.pdf", presente=False)  # ya no está: no cuenta
+    # Analizado, pero el archivo cambió después: su sha256 actual está pendiente.
+    cambiado = beto.documentos.filter(presente=True).first()
+    cambiado.sha256 = "f" * 64
+    cambiado.save()
+    entrar(client, revisor)
+    html = client.get(reverse("tablero")).content.decode()
+    assert "2 pendientes de análisis" in html
+    assert "1 pendiente de análisis" in html
+    html = client.get(reverse("tablero"), {"pendientes": "1"}).content.decode()
+    assert "Ana Ejemplo" in html and "Beto Prueba" in html
+    cambiado.sha256 = Analisis.objects.filter(documento=cambiado).first().sha256
+    cambiado.save()
+    html = client.get(reverse("tablero"), {"pendientes": "1"}).content.decode()
+    assert "Ana Ejemplo" in html and "Beto Prueba" not in html
+    assert 'id="pendientes"' in html
+
+
+def test_un_error_de_analisis_no_es_pendiente(client, revisor, datos, corrida):
+    nuevo = _sin_analizar(datos["ana"], "fallo.pdf")
+    Analisis.objects.create(
+        documento=nuevo,
+        corrida=corrida,
+        sha256=nuevo.sha256,
+        modelo="simulado",
+        tipo_detectado=Analisis.TIPO_ERROR,
+        es_valido=False,
+        observaciones="Red caída.",
+    )
+    html = entrar(client, revisor).get(reverse("tablero"), {"pendientes": "1"}).content.decode()
+    assert "Ana Ejemplo" not in html
+
+
+def test_detalle_muestra_pendiente_y_no_error(client, revisor, datos):
+    ana = datos["ana"]
+    nuevo = _sin_analizar(ana, "zz-nuevo.pdf")
+    entrar(client, revisor)
+    html = client.get(reverse("detalle", args=[ana.pk])).content.decode()
+    assert "1 documento pendiente de análisis." in html
+    html = client.get(reverse("detalle", args=[ana.pk]), {"documento": nuevo.pk}).content.decode()
+    inicio = html.index(f'id="doc-{nuevo.pk}"')
+    enlace = html[inicio : html.index("</a>", inicio)]
+    assert "Pendiente de análisis" in enlace and "Error" not in enlace
+    panel = html[html.index('id="panel"') :]
+    assert "Se analizará en la próxima corrida." in panel
+    assert "<dt>Error</dt>" not in panel

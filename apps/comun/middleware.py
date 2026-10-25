@@ -1,4 +1,8 @@
-"""Cabeceras de seguridad para toda página de la app (ADR 0005)."""
+"""Cabeceras de seguridad y avisos para HTMX (ADR 0005)."""
+
+import json
+
+from django.contrib import messages
 
 POLITICA = "; ".join(
     [
@@ -32,4 +36,30 @@ class CabecerasDeSeguridad:
         respuesta["Cache-Control"] = "no-store"
         if not request.path.startswith("/admin/"):
             respuesta.headers.setdefault("Content-Security-Policy", POLITICA)
+        return respuesta
+
+
+class AvisosHtmx:
+    """En una respuesta a HTMX, los mensajes pendientes viajan en HX-Trigger.
+
+    El fragmento que HTMX inserta no trae la región de avisos de base.html, así que sin
+    esto el mensaje se perdería o aparecería en la página siguiente. static/js/app.js
+    escucha el evento "avisos" y muestra cada uno. Va después de MessageMiddleware en
+    MIDDLEWARE para consumir los mensajes antes de que este los guarde. Las redirecciones
+    se saltan: los mensajes los recibe la página de destino.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        respuesta = self.get_response(request)
+        if not request.headers.get("HX-Request") or 300 <= respuesta.status_code < 400:
+            return respuesta
+        avisos = [{"nivel": m.level_tag, "texto": str(m)} for m in messages.get_messages(request)]
+        if avisos:
+            disparadores = json.loads(respuesta.headers.get("HX-Trigger", "{}") or "{}")
+            disparadores["avisos"] = avisos
+            # ensure_ascii: las cabeceras HTTP solo admiten latin-1; HTMX decodifica el JSON.
+            respuesta["HX-Trigger"] = json.dumps(disparadores)
         return respuesta

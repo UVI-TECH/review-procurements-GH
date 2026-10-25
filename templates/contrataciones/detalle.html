@@ -20,6 +20,9 @@
         {% else %}<span class="insignia verificacion-pendiente">Pendiente</span>{% endif %}
       </dd></div>
     </dl>
+    {% if por_analizar %}
+      <p class="aviso aviso-pendiente"><strong>{{ por_analizar }} documento{{ por_analizar|pluralize }} pendiente{{ por_analizar|pluralize }} de análisis.</strong> El estado y lo que falta pueden cambiar cuando se analice{{ por_analizar|pluralize:"n" }}.</p>
+    {% endif %}
     {% if evaluacion.faltantes %}
       <p class="aviso"><strong>Faltan:</strong> {% for tipo in evaluacion.faltantes %}{{ tipo.etiqueta }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
     {% endif %}
@@ -42,34 +45,7 @@
   {% endif %}
 </section>
 
-<div class="espacio-trabajo">
-  <section class="documentos" aria-labelledby="titulo-documentos">
-    <h2 id="titulo-documentos">Documentos ({{ documentos|length }})</h2>
-    {% if documentos %}
-    <ul class="lista-documentos">
-      {% for d in documentos %}{% with e=d.evaluado %}
-      <li class="documento{% if elegido and elegido.evaluado.documento.pk == e.documento.pk %} documento-elegido{% endif %}">
-        <a href="?documento={{ e.documento.pk }}#panel"
-           hx-get="?documento={{ e.documento.pk }}" hx-target="#panel" hx-swap="outerHTML" hx-push-url="true"
-           {% if elegido and elegido.evaluado.documento.pk == e.documento.pk %}aria-current="true"{% endif %}>
-          <span class="documento-nombre">{{ e.documento.nombre_archivo }}</span>
-          <span class="documento-tipo">{{ d.tipo_efectivo }}</span>
-          {% if d.valido is True %}<span class="insignia semaforo-valido">✓ Válido</span>
-          {% elif d.valido is False %}<span class="insignia semaforo-invalido">✗ {% if e.resultado.es_error %}Error{% elif e.resultado.es_ilegible %}Ilegible{% else %}Inválido{% endif %}</span>
-          {% else %}<span class="insignia">Descartado</span>{% endif %}
-          {% if e.revision %}<span class="etiqueta">Revisado: {{ e.revision.get_decision_display|lower }}</span>{% endif %}
-          {% if e.documento.reintentos_agotados %}<span class="etiqueta etiqueta-atencion">Reintentos agotados</span>{% endif %}
-        </a>
-      </li>
-      {% endwith %}{% endfor %}
-    </ul>
-    {% else %}
-      <p class="vacio">Este profesor no tiene documentos en su carpeta.</p>
-    {% endif %}
-  </section>
-
-  {% include "contrataciones/_panel.html" %}
-</div>
+{% include "contrataciones/_espacio.html" %}
 
 <details class="historial">
   <summary><h2>Historial</h2></summary>
