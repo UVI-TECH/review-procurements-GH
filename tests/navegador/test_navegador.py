@@ -151,7 +151,7 @@ def test_estado_pendiente_de_analisis_en_el_tablero(page, entrar, problemas):
     assert color(page, ".etiqueta-pendiente") == pendiente
     assert color(page, ".total.estado-pendiente_analisis") == pendiente
 
-    page.get_by_label("Estado").select_option("PENDIENTE_ANALISIS")
+    page.get_by_label("Estado", exact=True).select_option("PENDIENTE_ANALISIS")
     expect(page.get_by_role("link", name="Ana Ejemplo")).to_have_count(0)
     expect(page.get_by_role("link", name="Ciro Pendiente")).to_be_visible()
 
