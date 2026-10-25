@@ -1,5 +1,7 @@
 """Comandos para la validación real (los ejecuta John) y la comparación con el legado."""
 
+from dataclasses import replace
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -320,3 +322,88 @@ def test_pendiente_de_analisis_es_diferencia_intencional(legado):
     assert "pendiente_de_analisis" in informe["diferencias_intencionales"]
     assert informe["diferencias_no_explicadas"] == []
     assert informe["documentos"][-1]["nuevo"]["tipo"] == "pendiente"
+
+
+# --- Requisitos 2026-2 (ADR 0006) ---
+
+REFERENCIA = date(2026, 7, 15)
+
+
+def con_fecha(r, dias=3, logo=None):
+    return replace(r, fecha_expedicion=REFERENCIA - timedelta(days=dias), tiene_logo_oficial=logo)
+
+
+def comparar_nuevos(nuevos, legado, viejos=None):
+    viejos = [a_dict_legado(r) for r in nuevos] if viejos is None else viejos
+    return comparar_profesor("P", viejos, nuevos, catalogo_inicial(), legado, hoy=REFERENCIA)
+
+
+def test_eps_y_afp_van_al_tipo_unico_del_legado(legado):
+    for codigo in CODIGOS_SEGURIDAD_SOCIAL:
+        assert a_dict_legado(resultado(codigo))["tipo_detectado"] == "certificados_eps_afp"
+    informe = comparar_nuevos([con_fecha(r) for r in completos()], legado)
+    assert informe["legado"]["estado"] == "COMPLETO"
+    assert informe["motor_nuevo"]["estado"] == "COMPLETO"
+    assert all(d["coincide_tipo"] for d in informe["documentos"])
+
+
+def test_solo_eps_es_la_separacion_eps_afp(legado):
+    nuevos = [con_fecha(r) for r in completos() if r.tipo_detectado != "certificado_afp"]
+    informe = comparar_nuevos(nuevos, legado)
+    assert informe["legado"]["estado"] == "COMPLETO"  # al legado le basta un documento
+    assert informe["motor_nuevo"]["estado"] == "INCOMPLETO"
+    assert informe["diferencias_intencionales"] == ["separacion_eps_afp"]
+
+
+def test_vencido_contra_la_fecha_de_referencia_es_vigencia(legado):
+    nuevos = [
+        con_fecha(r, dias=45 if r.tipo_detectado == "certificado_eps" else 3) for r in completos()
+    ]
+    informe = comparar_nuevos(nuevos, legado)
+    assert informe["motor_nuevo"]["estado"] == "CON_PROBLEMAS"
+    assert informe["motor_nuevo"]["vencidos"] == ["certificado_eps.pdf"]
+    assert informe["diferencias_intencionales"] == ["vigencia"]
+    # Sin fecha de referencia no se evalúa la vigencia.
+    sin_vigencia = comparar_profesor(
+        "P", [a_dict_legado(r) for r in nuevos], nuevos, catalogo_inicial(), legado
+    )
+    assert sin_vigencia["motor_nuevo"]["estado"] == "COMPLETO"
+
+
+def test_alternativa_de_pension_es_intencional(legado):
+    bono = con_fecha(resultado("carta_bono_pensional", archivo="bono.pdf"), dias=200)
+    nuevos = [con_fecha(r) for r in completos() if r.tipo_detectado != "certificado_afp"]
+    # La IA del legado no conocía la carta: la tomó como un documento que no es requisito.
+    viejos = [*[a_dict_legado(r) for r in nuevos], {"tipo_detectado": "otro", "es_valido": False}]
+    informe = comparar_nuevos([*nuevos, bono], legado, viejos)
+    assert informe["legado"]["estado"] == "INCOMPLETO"
+    assert informe["motor_nuevo"]["estado"] == "COMPLETO"
+    assert informe["origen_diferencia_estado"] == "ia"
+    assert informe["diferencias_intencionales"] == ["alternativa_pension"]
+    assert informe["diferencias_no_explicadas"] == []
+
+
+def test_resumen_cuenta_el_logo_por_tipo(legado):
+    nuevos = [con_fecha(r, logo=r.tipo_detectado != "certificado_eps") for r in completos()]
+    nuevos[0] = replace(nuevos[0], tiene_logo_oficial=None)
+    resumen = resumir([comparar_nuevos(nuevos, legado)])
+    conteo = resumen["logo_por_tipo"]
+    assert conteo["certificado_eps"] == {"verdadero": 0, "falso": 1, "nulo": 0}
+    assert conteo["certificado_afp"] == {"verdadero": 1, "falso": 0, "nulo": 0}
+    assert conteo[nuevos[0].tipo_detectado] == {"verdadero": 0, "falso": 0, "nulo": 1}
+    assert set(conteo) == set(CODIGOS)
+
+
+@pytest.mark.parametrize("fecha", ["2026-13-01", "15/07/2026"])
+def test_fecha_de_referencia_invalida_da_un_error_claro(fecha):
+    with pytest.raises(CommandError, match="no es una fecha AAAA-MM-DD"):
+        call_command(
+            "comparar_con_legado",
+            "c",
+            "--limite",
+            "1",
+            "--salida",
+            "/tmp/i.json",
+            "--fecha-referencia",
+            fecha,
+        )

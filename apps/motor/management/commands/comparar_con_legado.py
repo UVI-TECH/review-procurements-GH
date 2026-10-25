@@ -1,11 +1,14 @@
+import argparse
 import json
 import os
 import time
+from datetime import date
 from pathlib import Path
 
 import anthropic
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.motor.catalogo import cargar_catalogo
 from apps.motor.cliente_claude import ClienteClaude
@@ -34,6 +37,13 @@ class _ContadorDeTokens:
         return respuesta
 
 
+def _fecha(texto):
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"«{texto}» no es una fecha AAAA-MM-DD.") from None
+
+
 class Command(BaseCommand):
     help = (
         "Corre el motor del legado y el nuevo sobre los mismos profesores y compara los "
@@ -48,8 +58,13 @@ class Command(BaseCommand):
         parser.add_argument(
             "--salida", required=True, help="Ruta del informe JSON, fuera del repositorio"
         )
+        parser.add_argument(
+            "--fecha-referencia",
+            type=_fecha,
+            help="AAAA-MM-DD contra la que se evalúa la vigencia (por defecto, hoy)",
+        )
 
-    def handle(self, *args, carpeta, limite, salida, **opciones):
+    def handle(self, *args, carpeta, limite, salida, fecha_referencia=None, **opciones):
         exigir_api_real()
         raiz = Path(carpeta).expanduser()
         if not raiz.is_dir():
@@ -59,6 +74,7 @@ class Command(BaseCommand):
         ruta_salida = validar_ruta_salida(salida)
         exigir_migraciones()
 
+        hoy = fecha_referencia or timezone.localdate()
         catalogo = cargar_catalogo()
         cliente_nuevo = ClienteClaude(catalogo)
         legado = cargar_legado()
@@ -82,10 +98,11 @@ class Command(BaseCommand):
                     tokens_nuevo[campo] += getattr(nuevo.uso, campo)
                 time.sleep(pausa)
             informes.append(
-                comparar_profesor(carpeta_profesor.name, viejos, nuevos, catalogo, legado)
+                comparar_profesor(carpeta_profesor.name, viejos, nuevos, catalogo, legado, hoy=hoy)
             )
 
         resumen = {
+            "fecha_referencia": hoy.isoformat(),
             **resumir(informes),
             "tokens_legado": {"entrada": contador.entrada, "salida": contador.salida},
             "tokens_nuevo": tokens_nuevo,
