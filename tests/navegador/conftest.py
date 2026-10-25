@@ -41,6 +41,18 @@ def permitir_orm_con_playwright():
         os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = anterior
 
 
+# El visor de PDF de Chrome es una extensión interna. Si la página navega mientras carga
+# el PDF del iframe (p. ej. al guardar una revisión), el navegador aborta su petición: no
+# es un recurso de la app. Solo se ignora ese caso exacto.
+VISOR_PDF_DE_CHROME = "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/"
+
+
+def _fallo_propio(peticion):
+    return not (
+        peticion.url.startswith(VISOR_PDF_DE_CHROME) and peticion.failure == "net::ERR_ABORTED"
+    )
+
+
 @pytest.fixture
 def problemas(page):
     """Errores de consola, de JavaScript, de red y respuestas >= 400 durante la prueba."""
@@ -48,7 +60,10 @@ def problemas(page):
     page.add_init_script(script=ESCUCHAR_CSP)
     page.on("console", lambda m: m.type == "error" and lista.append(f"consola: {m.text}"))
     page.on("pageerror", lambda e: lista.append(f"JavaScript: {e}"))
-    page.on("requestfailed", lambda r: lista.append(f"falló {r.url}: {r.failure}"))
+    page.on(
+        "requestfailed",
+        lambda r: _fallo_propio(r) and lista.append(f"falló {r.url}: {r.failure}"),
+    )
     page.on("response", lambda r: r.status >= 400 and lista.append(f"{r.status} {r.url}"))
     yield lista
     assert lista == [], "\n".join(lista)
