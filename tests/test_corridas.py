@@ -408,8 +408,9 @@ def test_consola_muestra_corrida_progreso_y_resumen_sin_nombres(raiz, revisor):
     corrida = crear_corrida(Corrida.Alcance.NUEVOS_Y_MODIFICADOS, revisor)
     mensajes = []
     trabajar(raiz, informar=mensajes.append)
-    assert mensajes[0] == f"Corrida {corrida.pk} (nuevos_y_modificados): escaneando la carpeta…"
-    assert mensajes[1] == f"Corrida {corrida.pk}: {TOTAL} documentos por analizar."
+    assert mensajes[0] == "Estados recalculados por vigencia: 0 profesores."
+    assert mensajes[1] == f"Corrida {corrida.pk} (nuevos_y_modificados): escaneando la carpeta…"
+    assert mensajes[2] == f"Corrida {corrida.pk}: {TOTAL} documentos por analizar."
     progreso = [m for m in mensajes if " · " in m]
     assert len(progreso) == TOTAL
     assert progreso[0].startswith(f"Corrida {corrida.pk} · 1/{TOTAL} · errores: 0 · tokens:")
@@ -435,8 +436,9 @@ def test_consola_avisa_la_reanudacion(raiz, revisor):
     ClienteContador.antes_de_analizar = None
     mensajes = []
     trabajar(raiz, informar=mensajes.append)
-    assert mensajes[0] == f"Corrida {corrida.pk} (todos) reanudada: escaneando la carpeta…"
-    assert mensajes[1] == (
+    assert mensajes[0] == "Estados recalculados por vigencia: 2 profesores."
+    assert mensajes[1] == f"Corrida {corrida.pk} (todos) reanudada: escaneando la carpeta…"
+    assert mensajes[2] == (
         f"Corrida {corrida.pk} reanudada: {TOTAL - 5} de {TOTAL} documentos por analizar."
     )
     assert any(m.startswith(f"Corrida {corrida.pk} · {TOTAL}/{TOTAL}") for m in mensajes)
@@ -453,7 +455,10 @@ def test_mensaje_de_espera_una_sola_vez(raiz):
     with pytest.raises(WorkerDetenido) as detenido:
         ejecutar_worker(fuente=FuenteCarpetaLocal(raiz), intervalo=0, informar=informar)
     assert detenido.value.corrida_id is None
-    assert mensajes == ["Sin corridas pendientes; esperando…"]
+    assert mensajes == [
+        "Estados recalculados por vigencia: 0 profesores.",
+        "Sin corridas pendientes; esperando…",
+    ]
 
 
 def test_ctrl_c_a_mitad_deja_la_corrida_reanudable_y_cierra_el_pool(raiz, revisor):
@@ -535,3 +540,20 @@ def test_el_analisis_guarda_fecha_cobertura_y_logo(raiz, revisor):
         documento__ruta_relativa="PROFESOR UNO/formato_autorizacion_consulta_inhabilidades.pdf"
     )
     assert formato.es_plantilla_institucional is True
+
+
+def _reloj(*valores):
+    iterador = iter(valores)
+    return lambda: next(iterador)
+
+
+@pytest.mark.parametrize(("segundos", "recalculos"), [(24 * 3600, 2), (24 * 3600 - 1, 1)])
+def test_el_worker_recalcula_al_arrancar_y_cada_24_horas(raiz, revisor, segundos, recalculos):
+    mensajes = []
+    crear_corrida(Corrida.Alcance.TODOS, revisor)
+    # Llamadas al reloj: marca tras el primer recálculo, chequeo en la 2.ª vuelta, marca.
+    trabajar(raiz, informar=mensajes.append, reloj=_reloj(0, segundos, segundos))
+    assert [m for m in mensajes if m.startswith("Estados recalculados")] == [
+        "Estados recalculados por vigencia: 0 profesores.",
+        "Estados recalculados por vigencia: 2 profesores.",
+    ][:recalculos]

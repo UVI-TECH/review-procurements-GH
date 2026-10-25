@@ -1,14 +1,28 @@
 """Documentos con su análisis, creados directo en la base (sin worker), para las pruebas."""
 
+from datetime import timedelta
+
 from django.utils import timezone
 
 from apps.contrataciones.models import Analisis, Documento
-from tests.fixtures.catalogo import CODIGOS, FORMATO
+from tests.fixtures.catalogo import AFP, CODIGOS, EPS, FORMATO
 
 CEDULA = "1000000001"
 
 
-def documento(profesor, corrida, tipo, *, valido=True, cedula=CEDULA, nombre=None, sha=None):
+def documento(
+    profesor,
+    corrida,
+    tipo,
+    *,
+    valido=True,
+    cedula=CEDULA,
+    nombre=None,
+    sha=None,
+    dias=3,
+    cubre=None,
+):
+    """dias: hace cuántos días se expidió (None: fecha que la IA no leyó)."""
     nombre = nombre or f"{tipo or 'x'}.pdf"
     doc = Documento.objects.create(
         profesor=profesor,
@@ -27,6 +41,8 @@ def documento(profesor, corrida, tipo, *, valido=True, cedula=CEDULA, nombre=Non
         es_valido=valido,
         numero_documento=cedula,
         tiene_firma=True if tipo == FORMATO else None,
+        fecha_expedicion=None if dias is None else timezone.localdate() - timedelta(days=dias),
+        cubre=cubre if cubre is not None else {EPS: "eps", AFP: "afp"}.get(tipo, ""),
         observaciones="Error simulado." if tipo == Analisis.TIPO_ERROR else "",
     )
     return doc

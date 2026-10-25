@@ -389,3 +389,69 @@ def test_incompleto_con_pendiente_sigue_incompleto(prof, corrida, catalogo):
     completo(prof, corrida, **{CODIGOS[0]: None})
     _pendiente(prof)
     assert estado(prof, catalogo) == EstadoProfesor.INCOMPLETO
+
+
+# --- Vigencia (ADR 0006) ---
+
+
+def test_certificado_vencido_deja_con_problemas(prof, corrida, catalogo):
+    completo(prof, corrida, certificado_eps={"dias": 45})
+    assert estado(prof, catalogo) == EstadoProfesor.CON_PROBLEMAS
+
+
+def test_la_cedula_no_rescata_un_vencido_en_la_base(prof, corrida, catalogo):
+    # La IA lo marcó inválido; la cédula coincide, pero está vencido.
+    judicial = "certificado_antecedentes_judiciales"
+    docs = completo(prof, corrida, **{judicial: {"dias": 40, "valido": False}})
+    evaluacion, evaluados = evaluar(prof, catalogo)
+    [evaluado] = [e for e in evaluados if e.documento == docs[judicial]]
+    assert evaluado.resultado.vencido and not evaluado.resultado.es_valido
+    assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
+
+
+def test_fecha_sin_leer_no_invalida_pero_requiere_atencion(prof, corrida, catalogo):
+    completo(prof, corrida, certificado_afp={"dias": None})
+    assert estado(prof, catalogo) == EstadoProfesor.COMPLETO
+    assert prof.requiere_atencion
+
+
+def test_aprobar_un_vencido_exige_comentario_y_luego_prevalece(prof, corrida, catalogo, revisor):
+    docs = completo(prof, corrida, certificado_eps={"dias": 45})
+    with pytest.raises(ValidationError, match="venció el"):
+        crear_revision(docs["certificado_eps"], revisor, "aprobado")
+    crear_revision(
+        docs["certificado_eps"], revisor, "aprobado", comentario="GH aceptó la prórroga."
+    )
+    assert estado(prof, catalogo) == EstadoProfesor.COMPLETO
+
+
+def test_al_vencerse_un_certificado_la_verificacion_queda_desactualizada(
+    prof, corrida, catalogo, revisor, monkeypatch
+):
+    from datetime import timedelta
+
+    from apps.contrataciones.servicios import estado as servicio_estado
+
+    completo(prof, corrida)  # expedidos hace 3 días
+    verificar_profesor(prof, revisor)
+    prof.refresh_from_db()
+    assert prof.verificacion == Verificacion.VIGENTE
+
+    dentro_de_un_mes = servicio_estado.hoy() + timedelta(days=28)
+    monkeypatch.setattr(servicio_estado, "hoy", lambda: dentro_de_un_mes)
+    servicio_estado.recalcular_todos(catalogo)
+    prof.refresh_from_db()
+    assert prof.estado == EstadoProfesor.CON_PROBLEMAS
+    assert prof.verificacion == Verificacion.DESACTUALIZADA
+
+
+def test_recalcular_todos_salta_las_carpetas_desaparecidas(prof, corrida, catalogo):
+    completo(prof, corrida, certificado_eps={"dias": 45})
+    Profesor.objects.filter(pk=prof.pk).update(
+        carpeta_presente=False, estado=EstadoProfesor.COMPLETO
+    )
+    from apps.contrataciones.servicios.estado import recalcular_todos
+
+    assert recalcular_todos(catalogo) == 0
+    prof.refresh_from_db()
+    assert prof.estado == EstadoProfesor.COMPLETO  # conserva su último estado (ADR 0004)
