@@ -141,7 +141,9 @@ def color_de_variable(page, variable):
 def test_estado_pendiente_de_analisis_en_el_tablero(page, entrar, problemas):
     entrar()
     fila = page.locator("tr", has=page.get_by_role("link", name="Ciro Pendiente"))
-    expect(fila.locator(".insignia")).to_have_text("⏳ Pendiente de análisis")
+    expect(fila.locator(".insignia.estado-pendiente_analisis")).to_have_text(
+        "⏳ Pendiente de análisis"
+    )
     expect(fila.locator(".etiqueta-pendiente")).to_have_text("1 pendiente de análisis")
     # Los colores no los pisa la base de .insignia ni de .etiqueta.
     pendiente = color_de_variable(page, "--pendiente")
