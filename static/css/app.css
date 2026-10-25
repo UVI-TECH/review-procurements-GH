@@ -551,6 +551,18 @@ legend {
   letter-spacing: 0.03em;
 }
 
+/* Base de las insignias: va antes de los colores, que la sobrescriben. */
+.insignia {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--neutro);
+  background: var(--neutro-fondo);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .semaforo {
   text-align: center;
   font-weight: 700;
@@ -571,13 +583,6 @@ legend {
   background: var(--faltante-fondo);
 }
 
-.semaforo-pendiente,
-.etiqueta-pendiente {
-  color: var(--pendiente);
-  background: var(--pendiente-fondo);
-  border-color: var(--pendiente);
-}
-
 .aviso-pendiente {
   border-color: var(--pendiente);
   background: var(--pendiente-fondo);
@@ -587,17 +592,6 @@ legend {
 .semaforo-sin_dato {
   color: var(--neutro);
   background: var(--neutro-fondo);
-}
-
-.insignia {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--neutro);
-  background: var(--neutro-fondo);
-  border-radius: 999px;
-  white-space: nowrap;
 }
 
 .estado-completo,
@@ -641,6 +635,15 @@ legend {
   color: var(--acento);
   border-color: var(--acento);
   background: var(--acento-claro);
+}
+
+/* Después de .insignia y .etiqueta, para que el color no se pierda. */
+.semaforo-pendiente,
+.etiqueta-pendiente,
+.estado-pendiente_analisis {
+  color: var(--pendiente);
+  background: var(--pendiente-fondo);
+  border-color: var(--pendiente);
 }
 
 .paginacion {

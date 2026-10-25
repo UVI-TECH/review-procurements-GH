@@ -47,6 +47,10 @@ def validar_ruta_salida(ruta):
 
 def a_dict_legado(resultado):
     """ResultadoDocumento -> el dict que esperan las funciones del legado."""
+    if resultado.es_pendiente:
+        # El legado no tiene "pendiente": analizaba todo en la misma corrida. Lo más
+        # parecido en sus reglas es un documento sin resultado, que cuenta como problema.
+        return {"tipo_detectado": "ERROR", "es_valido": False, "observaciones": "Pendiente."}
     if resultado.es_error or resultado.es_ilegible:
         # El legado mandaba a la API también los ilegibles; fallaban y quedaban como ERROR.
         return {
@@ -96,7 +100,7 @@ def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
     tipos = [
         catalogo.resolver(d.tipo_detectado)
         for d in documentos
-        if not d.es_error and not d.es_ilegible
+        if not d.es_error and not d.es_ilegible and not d.es_pendiente
     ]
     codigos = [t.codigo for t in tipos if t is not None]
     if len(codigos) != len(set(codigos)):
@@ -107,6 +111,9 @@ def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
         motivos.append("error_de_analisis")
     if evaluacion.ilegibles:
         motivos.append("documento_ilegible")
+    # Estado nuevo: el legado no deja documentos sin analizar (ADR 0005).
+    if evaluacion.pendientes:
+        motivos.append("pendiente_de_analisis")
     # Estados nuevos donde el legado solo decía INCOMPLETO (ADR 0003, diferencia 4).
     if estado_legado == "INCOMPLETO":
         if evaluacion.estado == EstadoProfesor.SIN_DOCUMENTOS:
@@ -130,6 +137,7 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         "no_reconocidos": [r.nombre_archivo for r in evaluacion.no_reconocidos],
         "errores": [r.error for r in evaluacion.errores],
         "ilegibles": [r.nombre_archivo for r in evaluacion.ilegibles],
+        "pendientes": [r.nombre_archivo for r in evaluacion.pendientes],
     }
 
     completo = EstadoProfesor.COMPLETO
@@ -155,7 +163,9 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
     documentos = []
     for viejo, nuevo in zip(viejos, revalidados, strict=True):
         tipo_viejo = _tipo(catalogo, viejo.get("tipo_detectado"))
-        if nuevo.es_error:
+        if nuevo.es_pendiente:
+            tipo_nuevo = "pendiente"
+        elif nuevo.es_error:
             tipo_nuevo = "error"
         elif nuevo.es_ilegible:
             tipo_nuevo = "ilegible"

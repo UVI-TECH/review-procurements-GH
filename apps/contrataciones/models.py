@@ -99,6 +99,7 @@ class EstadoProfesor(models.TextChoices):
     INCOMPLETO = "INCOMPLETO", "Incompleto"
     CON_PROBLEMAS = "CON_PROBLEMAS", "Con problemas"
     SIN_DOCUMENTOS = "SIN_DOCUMENTOS", "Sin documentos"
+    PENDIENTE_ANALISIS = "PENDIENTE_ANALISIS", "Pendiente de análisis"
     ERROR = "ERROR", "Error"
 
 
@@ -184,7 +185,8 @@ class Profesor(models.Model):
         return self.nombre
 
     class Verificacion(models.TextChoices):
-        PENDIENTE = "pendiente", "Pendiente"
+        # "Sin verificar", no "Pendiente": no se confunde con "Pendiente de análisis".
+        PENDIENTE = "pendiente", "Sin verificar"
         VIGENTE = "vigente", "Verificado"
         DESACTUALIZADA = "desactualizada", "Desactualizada"
 

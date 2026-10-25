@@ -24,7 +24,8 @@ class ResultadoDocumento:
 
     Con error no vacío, el análisis falló por algo transitorio (API, red) y se resuelve
     reanalizando. Un archivo ilegible no es un error: es un problema del documento, con
-    una observación que dice qué pedir.
+    una observación que dice qué pedir. Uno pendiente aún no se ha analizado: no es un
+    error ni un problema, y no cumple ningún requisito (ADR 0005).
     """
 
     nombre_archivo: str
@@ -38,6 +39,7 @@ class ResultadoDocumento:
     error: str = ""
     # Un revisor lo aprobó o corrigió: es el vigente de su tipo antes que el de la IA.
     validado_por_revisor: bool = False
+    pendiente: bool = False
     modificado_en: datetime | None = None
     modelo: str = ""
     uso: Uso = field(default_factory=Uso)
@@ -48,12 +50,20 @@ class ResultadoDocumento:
         return bool(self.error)
 
     @property
+    def es_pendiente(self):
+        return self.pendiente
+
+    @property
     def es_ilegible(self):
         return self.tipo_detectado == TIPO_ILEGIBLE
 
     @classmethod
     def con_error(cls, nombre_archivo, mensaje, **extra):
         return cls(nombre_archivo=nombre_archivo, es_valido=False, error=mensaje, **extra)
+
+    @classmethod
+    def pendiente_de_analisis(cls, nombre_archivo, **extra):
+        return cls(nombre_archivo=nombre_archivo, es_valido=False, pendiente=True, **extra)
 
     @classmethod
     def ilegible(cls, nombre_archivo, observacion, **extra):

@@ -9,6 +9,7 @@ tiene acceso a la descarga del navegador. Para correrlas a mano en una terminal 
 import os
 
 import pytest
+from django.utils import timezone
 
 from apps.contrataciones.models import Analisis, Documento, Profesor
 from apps.contrataciones.servicios.estado import recalcular_estado
@@ -64,7 +65,18 @@ def datos_navegador(tmp_path, settings, crear_usuario, corrida):
     beto = Profesor.objects.create(carpeta="DEMO BETO", nombre="Beto Prueba")
     completo(beto, corrida, certificados_eps_afp=None)
     documento(beto, corrida, Analisis.TIPO_ILEGIBLE, valido=False, cedula="", nombre="roto.pdf")
-    for profesor in (ana, beto):
+    # Completo, pero con un archivo nuevo aún sin analizar: PENDIENTE_ANALISIS.
+    ciro = Profesor.objects.create(carpeta="DEMO CIRO", nombre="Ciro Pendiente")
+    completo(ciro, corrida)
+    Documento.objects.create(
+        profesor=ciro,
+        ruta_relativa="DEMO CIRO/nuevo.pdf",
+        nombre_archivo="nuevo.pdf",
+        sha256="e" * 64,
+        tamano=1,
+        modificado_en=timezone.now(),
+    )
+    for profesor in (ana, beto, ciro):
         recalcular_estado(profesor, catalogo)
     for doc in Documento.objects.all():
         destino = raiz / doc.ruta_relativa
@@ -73,7 +85,7 @@ def datos_navegador(tmp_path, settings, crear_usuario, corrida):
     revisor = crear_usuario("revisor", grupo="Revisor GH", first_name="Rita")
     revisor.set_password(CLAVE)
     revisor.save()
-    return {"ana": ana, "beto": beto, "revisor": revisor}
+    return {"ana": ana, "beto": beto, "ciro": ciro, "revisor": revisor}
 
 
 @pytest.fixture

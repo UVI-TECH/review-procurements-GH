@@ -73,7 +73,7 @@ Los PDFs **no son de confianza**: los suben los profesores y los generan portale
 
 ### Estado del profesor
 
-`evaluar_profesor` aplica este orden, del primero que se comprueba al último:
+`evaluar_profesor` aplica este orden, del primero que se comprueba al último. La Fase 4a agregó SIN_ANALIZAR y PENDIENTE_ANALISIS para los documentos aún sin analizar: el orden vigente está en el ADR 0005.
 
 1. **SIN_DOCUMENTOS:** no hay ningún PDF.
 2. **COMPLETO:** solo si se cumplen las cuatro condiciones:
@@ -102,6 +102,7 @@ Precisiones:
    - **ERROR frente a INCOMPLETO** (`error_de_analisis`): un documento cuyo análisis falló de forma transitoria. El legado lo cuenta como problema y deja al profesor INCOMPLETO. El motor nuevo dice ERROR (hay que reanalizar), salvo que el profesor esté COMPLETO sin ese documento.
 6. **Documentos ilegibles** (`documento_ilegible`). El legado mandaba a la API también un PDF con contraseña o dañado; la llamada fallaba y quedaba como un documento ERROR. El motor nuevo no lo envía, lo marca ilegible con una observación accionable y lo cuenta como algo pendiente, no como ERROR. En la comparación por documento, un ilegible coincide con el ERROR del legado.
 5. **La firma se generaliza.** En vez de la constante `TIPO_FORMATO`, la regla se aplica a todo tipo con `requiere_firma=True`, incluidos sus alias. Con el catálogo inicial, el resultado es el mismo.
+7. **Pendiente de análisis** (`pendiente_de_analisis`, ADR 0005). El legado analizaba todo en la misma corrida y no tiene ese estado. Para sus reglas, un pendiente es un documento sin resultado.
 
 ## Validación real (la hace John, nunca Claude Code)
 
@@ -117,7 +118,7 @@ Precisiones:
     | 3 | IA nueva | reglas nuevas |
 
   - La diferencia entre 1 y 2 viene del prompt o del modelo, y se reporta por documento (tipo y `es_valido`).
-  - La diferencia entre 2 y 3 viene de las reglas, y se clasifica con la diferencia intencional que la explica: `duplicados`, `cedula_ambigua`, `otro`, `error_de_analisis`, `documento_ilegible`, `sin_documentos` o `con_problemas` (estos dos, cuando el legado decía INCOMPLETO). También cuenta como diferencia de reglas un estado detallado distinto entre las columnas 2 y 3. Si ninguna la explica, queda en `diferencias_no_explicadas`.
+  - La diferencia entre 2 y 3 viene de las reglas, y se clasifica con la diferencia intencional que la explica: `duplicados`, `cedula_ambigua`, `otro`, `error_de_analisis`, `documento_ilegible`, `pendiente_de_analisis`, `sin_documentos` o `con_problemas` (estos dos, cuando el legado decía INCOMPLETO). También cuenta como diferencia de reglas un estado detallado distinto entre las columnas 2 y 3. Si ninguna la explica, queda en `diferencias_no_explicadas`.
   - En pantalla también sale `estado_detallado_difiere`: los profesores cuyo estado detallado es distinto aunque coincida COMPLETO / no COMPLETO (p. ej. INCOMPLETO frente a ERROR).
   - El informe detallado lleva datos reales: se escribe en JSON en `--salida`, y el comando rechaza una ruta dentro del repositorio. En pantalla solo salen conteos.
   - Gasta tokens de los dos motores.

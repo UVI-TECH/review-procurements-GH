@@ -1,0 +1,2 @@
+{# Insignia del estado del profesor: color, ícono (decorativo) y texto. #}
+<span class="insignia estado-{{ estado|lower }}">{% if estado == "PENDIENTE_ANALISIS" %}<span aria-hidden="true">⏳</span> {% endif %}{{ nombre }}</span>

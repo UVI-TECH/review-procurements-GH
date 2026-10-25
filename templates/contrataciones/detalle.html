@@ -8,7 +8,7 @@
     <h1 id="titulo-profesor">{{ profesor.nombre }}</h1>
     <p class="nota">Carpeta: {{ profesor.carpeta }}{% if not profesor.carpeta_presente %} · <strong>la carpeta ya no está en OneDrive</strong>{% endif %}</p>
     <dl class="datos">
-      <div><dt>Estado</dt><dd><span class="insignia estado-{{ profesor.estado|lower }}">{{ profesor.get_estado_display }}</span></dd></div>
+      <div><dt>Estado</dt><dd>{% include "contrataciones/_estado.html" with estado=profesor.estado nombre=profesor.get_estado_display %}</dd></div>
       <div><dt>Cédula</dt><dd class="cedula">
         {% if profesor.cedula_confirmada %}{{ profesor.cedula_confirmada }} <span class="etiqueta">Confirmada por {{ profesor.cedula_confirmada_por.get_full_name|default:profesor.cedula_confirmada_por.username }}</span>
         {% elif evaluacion.cedula_ambigua %}<span class="etiqueta etiqueta-atencion">Ambigua: confírmala</span>
@@ -17,7 +17,7 @@
       <div><dt>Verificación</dt><dd>
         {% if profesor.verificacion == "vigente" %}<span class="insignia verificacion-vigente">Verificado</span> por {{ profesor.verificado_por.get_full_name|default:profesor.verificado_por.username }}, {{ profesor.verificado_en|date:"j M Y, H:i" }}
         {% elif profesor.verificacion == "desactualizada" %}<span class="insignia verificacion-desactualizada">Desactualizada</span> Verificado por {{ profesor.verificado_por.get_full_name|default:profesor.verificado_por.username }} el {{ profesor.verificado_en|date:"j M Y, H:i" }}; algo cambió después.
-        {% else %}<span class="insignia verificacion-pendiente">Pendiente</span>{% endif %}
+        {% else %}<span class="insignia verificacion-pendiente">{{ profesor.verificacion.label }}</span>{% endif %}
       </dd></div>
     </dl>
     {% if por_analizar %}

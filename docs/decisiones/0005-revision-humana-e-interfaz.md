@@ -87,7 +87,26 @@ El legado tenía una regla que no analizaba a un profesor hasta que su carpeta e
 - Con el procesamiento incremental (ADR 0004), cada archivo se analiza una sola vez por sha256. Analizar temprano no gasta créditos de más: lo ya analizado no se repite cuando llegan los documentos que faltaban.
 - Sin análisis no se sabe qué falta. La carpeta puede tener los nueve archivos y aun así estar incompleta (un documento ilegible, de otro tipo o de otra persona), o tener menos archivos y ya cumplir los obligatorios.
 
-Lo que sí se distingue es el documento **pendiente de análisis**: un documento presente cuyo sha256 actual aún no tiene `Analisis`. Se muestra como tal en el detalle, no como error ni como faltante. El tablero indica cuántos tiene cada profesor y permite filtrar por ellos. Se calcula al consultar, no se guarda, porque el escaneo agrega documentos sin recalcular el resumen. Un documento cuyo único análisis es un error no está pendiente: se muestra como error y se reanaliza.
+Lo que sí se distingue es el documento **pendiente de análisis**: un documento presente cuyo sha256 actual aún no tiene `Analisis`. Se muestra como tal en el detalle, no como error ni como faltante. El tablero indica cuántos tiene cada profesor y permite filtrar por ellos. El contador se calcula al consultar, no se guarda, así que nunca depende de que el estado se haya recalculado. Un documento cuyo único análisis es un error no está pendiente: se muestra como error y se reanaliza.
+
+### Estado PENDIENTE_ANALISIS
+
+Un documento pendiente **no deja al profesor en ERROR**. ERROR queda solo para fallos transitorios del análisis (API, red), que se resuelven reanalizando. El motor representa el pendiente con `ResultadoDocumento.pendiente_de_analisis`: no es un error ni un problema, no cumple ningún requisito y no cuenta para la cédula. `evaluar_profesor` aplica este orden:
+
+1. **SIN_DOCUMENTOS:** no hay ningún PDF.
+2. **SIN_ANALIZAR:** todos los documentos están pendientes.
+3. **COMPLETO:** no falta nada, no hay problemas **ni pendientes**.
+4. **ERROR:** algún análisis falló de forma transitoria.
+5. **INCOMPLETO:** falta algún tipo obligatorio.
+6. **CON_PROBLEMAS:** hay un vigente inválido, la cédula es ambigua o hay un ilegible.
+7. **PENDIENTE_ANALISIS:** no falta nada ni hay problemas, pero aún hay documentos sin analizar.
+
+En los estados 5 y 6, el tablero muestra igual el contador de pendientes. Como PENDIENTE_ANALISIS no es COMPLETO, el profesor no se puede verificar hasta que se analice lo que llegó.
+
+- **En la interfaz:** el estado tiene su color, el ícono ⏳ y el texto "Pendiente de análisis", en el tablero, los totales y el detalle. Aparece en el filtro de estado.
+- **El escaneo** recalcula el estado, y no solo la huella, cuando cambian los archivos de una carpeta presente. Un archivo nuevo deja al profesor pendiente desde el escaneo, sin esperar al worker. Una carpeta que desaparece conserva su último estado, como dice el ADR 0004.
+- **En `comparar_con_legado`** es una diferencia intencional (`pendiente_de_analisis`), porque el legado analizaba todo en la misma corrida. En el comando real, los dos motores analizan cada PDF, así que solo aparece si `comparar_profesor` recibe un resultado pendiente.
+- **`sembrar_demo`** agrega un archivo nuevo a dos carpetas después de las corridas y solo escanea: uno queda PENDIENTE_ANALISIS y el otro sigue INCOMPLETO, con su contador.
 
 ### Ajustes tras la prueba técnica y el ensayo de usabilidad
 

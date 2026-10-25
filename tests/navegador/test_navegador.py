@@ -117,3 +117,51 @@ def test_el_aviso_se_cierra_solo(page, entrar, problemas, datos_navegador):
     aviso = page.locator("#avisos .aviso-flotante")
     expect(aviso).to_contain_text("Cédula confirmada.")
     expect(aviso).to_have_count(0, timeout=10_000)
+
+
+def color(page, selector):
+    return page.evaluate("(s) => getComputedStyle(document.querySelector(s)).color", selector)
+
+
+def color_de_variable(page, variable):
+    """El color calculado de una variable de :root (CSSOM: no lo restringe la CSP)."""
+    return page.evaluate(
+        """(v) => {
+            const muestra = document.createElement("span");
+            muestra.style.color = `var(${v})`;
+            document.body.append(muestra);
+            const calculado = getComputedStyle(muestra).color;
+            muestra.remove();
+            return calculado;
+        }""",
+        variable,
+    )
+
+
+def test_estado_pendiente_de_analisis_en_el_tablero(page, entrar, problemas):
+    entrar()
+    fila = page.locator("tr", has=page.get_by_role("link", name="Ciro Pendiente"))
+    expect(fila.locator(".insignia.estado-pendiente_analisis")).to_have_text(
+        "⏳ Pendiente de análisis"
+    )
+    expect(fila.locator(".etiqueta-pendiente")).to_have_text("1 pendiente de análisis")
+    # Los colores no los pisa la base de .insignia ni de .etiqueta.
+    pendiente = color_de_variable(page, "--pendiente")
+    assert color(page, ".insignia.estado-pendiente_analisis") == pendiente
+    assert color(page, ".etiqueta-pendiente") == pendiente
+    assert color(page, ".total.estado-pendiente_analisis") == pendiente
+
+    page.get_by_label("Estado", exact=True).select_option("PENDIENTE_ANALISIS")
+    expect(page.get_by_role("link", name="Ana Ejemplo")).to_have_count(0)
+    expect(page.get_by_role("link", name="Ciro Pendiente")).to_be_visible()
+
+
+def test_colores_de_las_insignias_del_detalle(page, entrar, problemas):
+    entrar()
+    page.get_by_role("link", name="Ciro Pendiente").click()
+    expect(page.locator(".ficha .insignia").first).to_have_text("⏳ Pendiente de análisis")
+    expect(page.get_by_role("button", name="Marcar como verificado")).to_be_disabled()
+    assert color(page, ".insignia.semaforo-valido") == color_de_variable(page, "--valido")
+    assert color(page, ".lista-documentos .insignia.semaforo-pendiente") == color_de_variable(
+        page, "--pendiente"
+    )
