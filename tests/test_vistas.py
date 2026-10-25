@@ -662,3 +662,15 @@ def test_estado_pendiente_de_analisis_en_tablero_y_filtro(client, consulta, dato
     assert '<option value="PENDIENTE_ANALISIS"' in html  # filtro
     html = client.get(reverse("tablero"), {"estado": "PENDIENTE_ANALISIS"}).content.decode()
     assert "Ana Ejemplo" in html and "Beto Prueba" not in html
+
+
+def test_verificacion_sin_verificar_no_se_confunde_con_pendiente_de_analisis(
+    client, revisor, datos
+):
+    entrar(client, revisor)
+    html = client.get(reverse("tablero")).content.decode()
+    assert '<span class="insignia verificacion-pendiente">Sin verificar</span>' in html
+    assert '<option value="pendiente">Sin verificar</option>' in html  # filtro, mismo valor
+    assert ">Pendiente<" not in html
+    html = client.get(reverse("detalle", args=[datos["beto"].pk])).content.decode()
+    assert '<span class="insignia verificacion-pendiente">Sin verificar</span>' in html

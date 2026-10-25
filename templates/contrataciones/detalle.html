@@ -17,7 +17,7 @@
       <div><dt>Verificación</dt><dd>
         {% if profesor.verificacion == "vigente" %}<span class="insignia verificacion-vigente">Verificado</span> por {{ profesor.verificado_por.get_full_name|default:profesor.verificado_por.username }}, {{ profesor.verificado_en|date:"j M Y, H:i" }}
         {% elif profesor.verificacion == "desactualizada" %}<span class="insignia verificacion-desactualizada">Desactualizada</span> Verificado por {{ profesor.verificado_por.get_full_name|default:profesor.verificado_por.username }} el {{ profesor.verificado_en|date:"j M Y, H:i" }}; algo cambió después.
-        {% else %}<span class="insignia verificacion-pendiente">Pendiente</span>{% endif %}
+        {% else %}<span class="insignia verificacion-pendiente">{{ profesor.verificacion.label }}</span>{% endif %}
       </dd></div>
     </dl>
     {% if por_analizar %}

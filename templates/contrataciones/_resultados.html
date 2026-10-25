@@ -24,7 +24,7 @@
       </th>
       {% if ve_cedulas %}<td class="cedula">{{ p.cedula_confirmada|default:p.cedula|default:"—" }}</td>{% endif %}
       <td>{% include "contrataciones/_estado.html" with estado=p.estado nombre=p.get_estado_display %}</td>
-      <td><span class="insignia verificacion-{{ p.verificacion }}">{% if p.verificacion == "vigente" %}Verificado{% elif p.verificacion == "desactualizada" %}Desactualizada{% else %}Pendiente{% endif %}</span></td>
+      <td><span class="insignia verificacion-{{ p.verificacion }}">{{ p.verificacion.label }}</span></td>
       {% for celda in fila.celdas %}
         <td class="semaforo semaforo-{{ celda.estado }}"><span aria-hidden="true">{{ celda.icono }}</span><span class="solo-lector">{{ celda.tipo.etiqueta }}: {{ celda.texto }}</span></td>
       {% endfor %}

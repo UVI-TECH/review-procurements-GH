@@ -185,7 +185,8 @@ class Profesor(models.Model):
         return self.nombre
 
     class Verificacion(models.TextChoices):
-        PENDIENTE = "pendiente", "Pendiente"
+        # "Sin verificar", no "Pendiente": no se confunde con "Pendiente de análisis".
+        PENDIENTE = "pendiente", "Sin verificar"
         VIGENTE = "vigente", "Verificado"
         DESACTUALIZADA = "desactualizada", "Desactualizada"
 
