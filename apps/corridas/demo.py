@@ -110,6 +110,18 @@ def generar_carpeta(raiz, codigos):
     return len(NOMBRES)
 
 
+# Después de las corridas llega un archivo nuevo a estas carpetas y solo se escanea: un
+# completo queda PENDIENTE_ANALISIS y un incompleto sigue INCOMPLETO, con su pendiente.
+LLEGAN_DESPUES = (9, 10)
+
+
+def agregar_pendientes(raiz):
+    for indice in LLEGAN_DESPUES:
+        carpeta = raiz / f"DEMO {indice + 1:02d} - {NOMBRES[indice]}"
+        archivo = f"carta de recomendacion cc_999{indice + 1:07d}.pdf"
+        _pdf(carpeta / archivo, f"{carpeta.name}/{archivo}")
+
+
 def sembrar(raiz, usuario, fuente, codigos):
     cantidad = generar_carpeta(raiz, codigos)
     escanear(fuente)
@@ -117,4 +129,6 @@ def sembrar(raiz, usuario, fuente, codigos):
     for _ in range(2):
         crear_corrida(Corrida.Alcance.NUEVOS_Y_MODIFICADOS, usuario)
         ejecutar_worker(una_vez=True, fuente=fuente)
+    agregar_pendientes(raiz)
+    escanear(fuente)  # sin corrida: quedan pendientes de análisis
     return cantidad

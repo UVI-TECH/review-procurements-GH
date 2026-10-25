@@ -26,6 +26,7 @@ def test_genera_todos_los_estados(entorno, capsys):
         EstadoProfesor.INCOMPLETO,
         EstadoProfesor.CON_PROBLEMAS,
         EstadoProfesor.SIN_DOCUMENTOS,
+        EstadoProfesor.PENDIENTE_ANALISIS,
     } <= estados
     assert Analisis.objects.filter(tipo_detectado=Analisis.TIPO_ILEGIBLE).exists()
     assert Analisis.objects.filter(tipo_detectado="otro").exists()
@@ -81,3 +82,15 @@ def test_sin_carpeta_configurada(settings, crear_usuario):
     crear_usuario("revisor", grupo="Revisor GH")
     with pytest.raises(CommandError, match="CARPETA_CONTRATACIONES"):
         call_command("sembrar_demo", "--usuario", "revisor")
+
+
+def test_pendientes_de_analisis_en_la_demo(entorno):
+    """Un completo con un archivo nuevo queda PENDIENTE_ANALISIS; un incompleto, INCOMPLETO."""
+    call_command("sembrar_demo", "--usuario", "revisor")
+    sin_analizar = Documento.objects.filter(presente=True, analisis__isnull=True)
+    profesores = {d.profesor for d in sin_analizar}
+    assert {p.estado for p in profesores} == {
+        EstadoProfesor.PENDIENTE_ANALISIS,
+        EstadoProfesor.INCOMPLETO,
+    }
+    assert not Profesor.objects.filter(estado=EstadoProfesor.ERROR, documentos__in=sin_analizar)
