@@ -99,6 +99,7 @@ class EstadoProfesor(models.TextChoices):
     INCOMPLETO = "INCOMPLETO", "Incompleto"
     CON_PROBLEMAS = "CON_PROBLEMAS", "Con problemas"
     SIN_DOCUMENTOS = "SIN_DOCUMENTOS", "Sin documentos"
+    PENDIENTE_ANALISIS = "PENDIENTE_ANALISIS", "Pendiente de análisis"
     ERROR = "ERROR", "Error"
 
 

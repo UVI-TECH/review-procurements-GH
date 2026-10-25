@@ -21,6 +21,7 @@ class EstadoProfesor(StrEnum):
     INCOMPLETO = "INCOMPLETO"
     CON_PROBLEMAS = "CON_PROBLEMAS"
     SIN_DOCUMENTOS = "SIN_DOCUMENTOS"
+    PENDIENTE_ANALISIS = "PENDIENTE_ANALISIS"
     ERROR = "ERROR"
 
 
@@ -128,6 +129,7 @@ class EvaluacionProfesor:
     vigentes: dict  # codigo -> ResultadoDocumento que cuenta para ese tipo
     cedula: str | None
     cedula_ambigua: bool
+    pendientes: tuple = ()  # ResultadoDocumento aún sin analizar (ADR 0005)
 
 
 def _clave_vigente(r):
@@ -140,13 +142,18 @@ def _clave_vigente(r):
 def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=None):
     """Estado del profesor según el orden acordado en el ADR 0003."""
     resultados = list(resultados)
+    pendientes = tuple(r for r in resultados if r.es_pendiente)
     errores = tuple(r for r in resultados if r.es_error)
     ilegibles = tuple(r for r in resultados if r.es_ilegible)
-    analizados = [r for r in resultados if not r.es_error and not r.es_ilegible]
+    analizados = [
+        r for r in resultados if not r.es_error and not r.es_ilegible and not r.es_pendiente
+    ]
     if evidencia is None:
         evidencia = analizados
     else:
-        evidencia = [r for r in evidencia if not r.es_error and not r.es_ilegible]
+        evidencia = [
+            r for r in evidencia if not r.es_error and not r.es_ilegible and not r.es_pendiente
+        ]
     ambigua = False if cedula_confirmada else cedula_ambigua(evidencia)
 
     por_tipo = {}
@@ -166,16 +173,22 @@ def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=
         if t.codigo in vigentes and vigentes[t.codigo].es_valido is not True
     )
 
+    hay_problemas = bool(problemas or ambigua or ilegibles)
     if not resultados:
         estado = EstadoProfesor.SIN_DOCUMENTOS
-    elif not faltantes and not problemas and not ambigua and not ilegibles:
+    elif len(pendientes) == len(resultados):
+        estado = EstadoProfesor.SIN_ANALIZAR
+    elif not faltantes and not hay_problemas and not pendientes:
         estado = EstadoProfesor.COMPLETO
     elif errores:
-        estado = EstadoProfesor.ERROR
+        estado = EstadoProfesor.ERROR  # solo fallos transitorios: se reanaliza
     elif faltantes:
         estado = EstadoProfesor.INCOMPLETO
-    else:
+    elif hay_problemas:
         estado = EstadoProfesor.CON_PROBLEMAS
+    else:
+        # No falta nada ni hay problemas, pero aún hay documentos sin analizar.
+        estado = EstadoProfesor.PENDIENTE_ANALISIS
 
     return EvaluacionProfesor(
         estado=estado,
@@ -187,4 +200,5 @@ def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=
         vigentes=vigentes,
         cedula=cedula_confirmada or (None if ambigua else cedula_modal(evidencia)),
         cedula_ambigua=ambigua,
+        pendientes=pendientes,
     )

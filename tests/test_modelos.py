@@ -32,6 +32,7 @@ def test_estados_del_profesor():
         "INCOMPLETO",
         "CON_PROBLEMAS",
         "SIN_DOCUMENTOS",
+        "PENDIENTE_ANALISIS",
         "ERROR",
     }
 

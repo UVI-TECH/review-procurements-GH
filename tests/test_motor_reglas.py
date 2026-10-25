@@ -417,3 +417,76 @@ def test_el_validado_por_un_revisor_es_el_vigente_aunque_sea_mas_viejo():
     mas_nuevo = doc("certificados_eps_afp", minutos=9)
     _, evaluacion = procesar(completos(certificados_eps_afp=revisado) + [mas_nuevo])
     assert evaluacion.vigentes["certificados_eps_afp"] == revisado
+
+
+# --- Pendiente de análisis (ADR 0005) ---
+
+
+def pendiente(archivo="nuevo.pdf"):
+    return ResultadoDocumento.pendiente_de_analisis(archivo, modificado_en=BASE)
+
+
+def test_pendiente_no_es_error_ni_ilegible():
+    p = pendiente()
+    assert p.es_pendiente and not p.es_error and not p.es_ilegible and not p.es_valido
+
+
+def test_completo_con_un_pendiente_queda_pendiente_de_analisis():
+    _, evaluacion = procesar([*completos(), pendiente()])
+    assert evaluacion.estado == EstadoProfesor.PENDIENTE_ANALISIS
+    assert [r.nombre_archivo for r in evaluacion.pendientes] == ["nuevo.pdf"]
+    assert evaluacion.errores == ()  # no es un fallo transitorio
+    assert evaluacion.faltantes == () and evaluacion.problemas == ()
+
+
+def test_falta_un_tipo_y_hay_pendientes_queda_incompleto():
+    _, evaluacion = procesar([*completos(**{MEDICO: None}), pendiente()])
+    assert evaluacion.estado == EstadoProfesor.INCOMPLETO
+    assert len(evaluacion.pendientes) == 1
+
+
+def test_un_invalido_y_un_pendiente_queda_con_problemas():
+    # Sin cédula: la revalidación no lo rescata.
+    _, evaluacion = procesar(
+        [*completos(**{MEDICO: doc(MEDICO, valido=False, cedula="")}), pendiente()]
+    )
+    assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
+    assert len(evaluacion.pendientes) == 1
+
+
+def test_cedula_ambigua_y_un_pendiente_queda_con_problemas():
+    # 2 documentos con una cédula, 2 con otra y el resto sin cédula: empate.
+    cedulas = [OTRA, OTRA, CEDULA, CEDULA]
+    docs = [
+        replace(d, numero_documento=cedulas[i] if i < 4 else "") for i, d in enumerate(completos())
+    ]
+    _, evaluacion = procesar([*docs, pendiente()])
+    assert evaluacion.cedula_ambigua
+    assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
+
+
+def test_el_pendiente_no_cumple_ningun_requisito():
+    # Aunque su nombre de archivo sea de un tipo, sin análisis no se sabe qué es.
+    _, evaluacion = procesar([*completos(**{MEDICO: None}), pendiente(f"{MEDICO}.pdf")])
+    assert [t.codigo for t in evaluacion.faltantes] == [MEDICO]
+    assert MEDICO not in evaluacion.vigentes
+
+
+def test_el_pendiente_no_cuenta_para_la_cedula():
+    docs = [*completos(), pendiente()]
+    revalidados, evaluacion = procesar(docs)
+    assert evaluacion.cedula == CEDULA
+    assert revalidados[-1] == docs[-1]  # la revalidación no lo toca
+
+
+def test_error_transitorio_sigue_siendo_error_aunque_haya_pendientes():
+    _, evaluacion = procesar(
+        [*completos(**{MEDICO: None}), doc("", valido=False, error="Red caída."), pendiente()]
+    )
+    assert evaluacion.estado == EstadoProfesor.ERROR
+
+
+def test_todos_pendientes_queda_sin_analizar():
+    _, evaluacion = procesar([pendiente("a.pdf"), pendiente("b.pdf")])
+    assert evaluacion.estado == EstadoProfesor.SIN_ANALIZAR
+    assert len(evaluacion.pendientes) == 2
