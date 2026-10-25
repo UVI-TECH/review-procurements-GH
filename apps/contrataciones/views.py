@@ -162,9 +162,12 @@ def tablero(request):
 # --- Detalle ---
 
 
+COBERTURA = {"eps": "EPS", "afp": "Pensión", "ambos": "EPS y pensión"}
+
+
 def _nombre_de_tipo(catalogo, codigo):
-    tipo = catalogo.resolver(codigo)
-    return tipo.etiqueta if tipo else NOMBRE_DE_TIPO.get(codigo, codigo)
+    """La etiqueta del alias si tiene una (con qué documento se cumplió), o la del tipo."""
+    return catalogo.etiqueta_de(codigo) or NOMBRE_DE_TIPO.get(codigo, codigo)
 
 
 def _historial(profesor, documentos):
@@ -209,6 +212,14 @@ def detalle(request, pk):
                 and tipo_ia not in (Analisis.TIPO_ERROR, Analisis.TIPO_ILEGIBLE)
                 and catalogo.resolver(tipo_ia) is not None,
                 "cedula_ajena": cedula_que_no_coincide(e, evaluacion.cedula or ""),
+                # Vigencia y lo que solo se observa (ADR 0006).
+                "vencido": e.resultado_ia.vencido,
+                "por_vencer": e.resultado_ia.por_vencer
+                and bool(e.resultado)
+                and e.resultado.es_valido,
+                "fecha_sin_leer": e.resultado_ia.fecha_sin_leer,
+                "cubre": COBERTURA.get(e.resultado_ia.cubre, ""),
+                "observacion_alias": catalogo.observacion_de(tipo_ia),
             }
         )
 
@@ -224,6 +235,9 @@ def detalle(request, pk):
         "profesor": profesor,
         "evaluacion": evaluacion,
         "por_analizar": sum(d["pendiente"] for d in documentos),
+        "por_vencer": [
+            (_nombre_de_tipo(catalogo, r.tipo_detectado), r.vence_el) for r in evaluacion.por_vencer
+        ],
         "documentos": documentos,
         "elegido": elegido,
         "tipos_activos": TipoDocumento.objects.filter(activo=True).order_by("orden"),

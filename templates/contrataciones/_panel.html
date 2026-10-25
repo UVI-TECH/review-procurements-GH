@@ -4,6 +4,9 @@
 
   <dl class="datos datos-documento">
     <div><dt>La IA dice</dt><dd>{% if elegido.pendiente %}<span class="insignia semaforo-pendiente"><span aria-hidden="true">⏳</span> Pendiente de análisis</span> Se analizará en la próxima corrida.{% else %}{{ elegido.tipo_ia }} · {% if e.resultado_ia.es_valido %}válido{% elif e.resultado_ia.es_error %}error{% else %}inválido{% endif %}{% endif %}</dd></div>
+    {% if elegido.cubre %}<div><dt>Cubre</dt><dd>{{ elegido.cubre }}</dd></div>{% endif %}
+    {% if e.analisis and not elegido.pendiente and not e.resultado_ia.es_error %}<div><dt>Fecha de expedición</dt><dd>{% if e.analisis.fecha_expedicion %}{{ e.analisis.fecha_expedicion|date:"d/m/Y" }}{% if e.resultado_ia.vence_el %} · {% if elegido.vencido %}venció{% else %}vence{% endif %} el {{ e.resultado_ia.vence_el|date:"d/m/Y" }}{% endif %}{% else %}No se pudo leer{% endif %}</dd></div>
+    <div><dt>Logo de la entidad</dt><dd>{% if e.analisis.tiene_logo_oficial is True %}Sí{% elif e.analisis.tiene_logo_oficial is False %}No se ve{% else %}No se sabe{% endif %}{% if e.analisis.es_plantilla_institucional is not None %} · Plantilla de la UNICAMACHO: {% if e.analisis.es_plantilla_institucional %}sí{% else %}no{% endif %}{% endif %} <span class="nota">(solo se observa; no cambia la validez)</span></dd></div>{% endif %}
     {% if e.analisis.numero_documento %}<div><dt>Cédula en el documento</dt><dd class="cedula">{{ e.analisis.numero_documento }}</dd></div>{% endif %}
     {% if e.analisis.nombre_persona %}<div><dt>Nombre en el documento</dt><dd>{{ e.analisis.nombre_persona }}</dd></div>{% endif %}
     {% if e.resultado_ia.observaciones %}<div><dt>Observaciones</dt><dd>{{ e.resultado_ia.observaciones }}</dd></div>{% endif %}
@@ -13,6 +16,11 @@
       {% else %}Sin revisión: cuenta lo que dice la IA.{% endif %}
     </dd></div>
   </dl>
+
+  {% if elegido.observacion_alias %}<p class="aviso">{{ elegido.observacion_alias }}</p>{% endif %}
+  {% if elegido.vencido %}<p class="aviso aviso-fuerte">Certificado vencido: venció el {{ e.resultado_ia.vence_el|date:"d/m/Y" }}. Pide uno nuevo.</p>
+  {% elif elegido.por_vencer %}<p class="aviso">Vence el {{ e.resultado_ia.vence_el|date:"d/m" }}: pide uno nuevo antes de esa fecha.</p>
+  {% elif elegido.fecha_sin_leer %}<p class="aviso">No se pudo leer la fecha de expedición: revisa la vigencia en el PDF.</p>{% endif %}
 
   {% if puede_ver_pdf %}
     <iframe class="visor" src="{% url 'pdf' e.documento.pk %}" title="PDF: {{ e.documento.nombre_archivo }}"></iframe>
@@ -39,8 +47,11 @@
     {% if elegido.cedula_ajena %}
       <p class="aviso aviso-fuerte" id="aviso-cedula">La cédula del documento (<span class="cedula">{{ elegido.cedula_ajena }}</span>) no coincide con la del profesor (<span class="cedula">{{ evaluacion.cedula }}</span>). Para aprobarlo o corregirlo, explica por qué en el comentario.</p>
     {% endif %}
+    {% if elegido.vencido %}
+      <p class="aviso aviso-fuerte" id="aviso-vencido">El certificado está vencido. Para aprobarlo o corregirlo, explica por qué en el comentario.</p>
+    {% endif %}
     <label for="comentario">Comentario <span class="nota">(obligatorio salvo al aprobar)</span></label>
-    <textarea id="comentario" name="comentario" rows="3"{% if elegido.cedula_ajena %} aria-describedby="aviso-cedula"{% endif %}></textarea>
+    <textarea id="comentario" name="comentario" rows="3"{% if elegido.cedula_ajena or elegido.vencido %} aria-describedby="{% if elegido.cedula_ajena %}aviso-cedula{% endif %}{% if elegido.cedula_ajena and elegido.vencido %} {% endif %}{% if elegido.vencido %}aviso-vencido{% endif %}"{% endif %}></textarea>
     <button type="submit" class="boton boton-principal">Guardar decisión</button>
   </form>
   {% elif puede_revisar %}
