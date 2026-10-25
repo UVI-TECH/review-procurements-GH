@@ -40,6 +40,11 @@ class ResultadoDocumento:
     # Solo se observan; aún no cambian es_valido (ADR 0006).
     tiene_logo_oficial: bool | None = None
     es_plantilla_institucional: bool | None = None
+    # Los pone reglas.aplicar_vigencia contra una fecha de referencia (ADR 0006).
+    vencido: bool = False
+    fecha_sin_leer: bool = False  # el tipo vence, pero no hay fecha confiable
+    vence_el: date | None = None
+    por_vencer: bool = False  # vence en 7 días o menos
     datos_extra: dict = field(default_factory=dict)
     observaciones: str = ""
     error: str = ""
