@@ -210,7 +210,7 @@ def detalle(request, pk):
         "puede_ver_pdf": request.user.has_perm("contrataciones.ver_pdf"),
     }
     if request.headers.get("HX-Request") and "documento" in request.GET:
-        respuesta = render(request, "contrataciones/_panel.html", contexto)
+        respuesta = render(request, "contrataciones/_espacio.html", contexto)
         patch_vary_headers(respuesta, ["HX-Request"])
         return respuesta
     return _responder(

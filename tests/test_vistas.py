@@ -547,3 +547,31 @@ def test_encabezados_de_tipo_con_tooltip_accesible_con_teclado(client, revisor, 
         ) in html
     css = (BASE_DIR / "static/css/app.css").read_text()
     assert ".col-tipo:focus-within .tooltip" in css  # no solo :hover
+
+
+def test_elegir_documento_por_htmx_mueve_el_resaltado_de_la_lista(client, revisor, datos):
+    import re
+
+    ana = datos["ana"]
+    primero, segundo = ana.documentos.order_by("ruta_relativa")[:2]
+    respuesta = entrar(client, revisor).get(
+        reverse("detalle", args=[ana.pk]),
+        {"documento": segundo.pk},
+        headers={"HX-Request": "true"},
+    )
+    html = respuesta.content.decode()
+    assert html.lstrip().startswith('<div id="espacio"')  # lista y panel, no la página
+    assert "<html" not in html
+    actuales = re.findall(r'<a id="doc-(\d+)"[^>]*aria-current="true"', html)
+    assert actuales == [str(segundo.pk)]
+    assert f'id="doc-{primero.pk}"' in html
+    assert f'src="{reverse("pdf", args=[segundo.pk])}"' in html
+
+
+def test_el_detalle_sin_elegir_resalta_el_primer_documento(client, revisor, datos):
+    import re
+
+    ana = datos["ana"]
+    primero = ana.documentos.order_by("ruta_relativa").first()
+    html = entrar(client, revisor).get(reverse("detalle", args=[ana.pk])).content.decode()
+    assert re.findall(r'<a id="doc-(\d+)"[^>]*aria-current="true"', html) == [str(primero.pk)]

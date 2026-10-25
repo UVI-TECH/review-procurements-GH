@@ -728,9 +728,11 @@ legend {
   border-left-color: var(--tinta);
 }
 
-.documento-elegido a {
-  border-left-color: var(--acento);
+/* El elegido se marca con aria-current (lo anuncia el lector) y, a la vista, con color. */
+.documento a[aria-current="true"] {
+  border-left: 6px solid var(--acento);
   background: var(--acento-claro);
+  box-shadow: inset 0 0 0 1px var(--acento);
 }
 
 .documento-nombre {
