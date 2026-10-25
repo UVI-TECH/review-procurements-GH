@@ -49,25 +49,26 @@ def test_resolvedor_ignora_tipos_inactivos():
 
 @pytest.mark.django_db
 def test_adaptador_carga_el_catalogo_de_la_base_de_datos():
-    assert cargar_catalogo().tipos == catalogo_inicial().tipos
+    # El catálogo de pruebas no trae el tipo inactivo certificados_eps_afp (ADR 0006).
+    assert cargar_catalogo().activos == catalogo_inicial().activos
 
 
 @pytest.mark.django_db
 def test_adaptador_respeta_activo_y_obligatorio():
     from apps.contrataciones.models import TipoDocumento
 
-    TipoDocumento.objects.filter(codigo="certificados_eps_afp").update(obligatorio=False)
+    TipoDocumento.objects.filter(codigo="certificado_afp").update(obligatorio=False)
     TipoDocumento.objects.filter(codigo=MEDICO).update(activo=False)
     catalogo = cargar_catalogo()
     assert catalogo.resolver(DOTC) is None
-    assert catalogo.resolver("certificados_eps_afp").obligatorio is False
+    assert catalogo.resolver("certificado_afp").obligatorio is False
 
 
 # --- Esquema ---
 
 
 def test_herramienta_estricta_con_enum_del_catalogo_activo():
-    herramienta = construir_herramienta(catalogo_inicial(certificados_eps_afp={"activo": False}))
+    herramienta = construir_herramienta(catalogo_inicial(certificado_afp={"activo": False}))
     assert herramienta["name"] == NOMBRE_HERRAMIENTA
     assert herramienta["strict"] is True
     esquema = herramienta["input_schema"]
@@ -75,8 +76,8 @@ def test_herramienta_estricta_con_enum_del_catalogo_activo():
     assert set(esquema["required"]) == set(esquema["properties"])
     enum = esquema["properties"]["tipo_detectado"]["enum"]
     assert DOTC in enum and TIPO_OTRO in enum
-    assert "certificados_eps_afp" not in enum
-    assert set(enum) == (set(CODIGOS) - {"certificados_eps_afp"}) | {DOTC, TIPO_OTRO}
+    assert "certificado_afp" not in enum
+    assert set(enum) == (set(CODIGOS) - {"certificado_afp"}) | {DOTC, TIPO_OTRO}
 
 
 def test_herramienta_es_determinista():

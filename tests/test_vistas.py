@@ -48,7 +48,7 @@ def datos(raiz, corrida):
     ana = Profesor.objects.create(carpeta="DEMO ANA", nombre="Ana Ejemplo", cedula="")
     completo(ana, corrida)
     beto = Profesor.objects.create(carpeta="DEMO BETO", nombre="Beto Prueba")
-    completo(beto, corrida, certificados_eps_afp=None)
+    completo(beto, corrida, certificado_afp=None)
     documento(beto, corrida, Analisis.TIPO_ILEGIBLE, valido=False, cedula="", nombre="roto.pdf")
     ido = Profesor.objects.create(carpeta="DEMO IDO", nombre="Ido Ausente", carpeta_presente=False)
     for profesor in (ana, beto, ido):
@@ -139,7 +139,7 @@ def test_revisor_ve_el_detalle(client, revisor, datos):
 
 
 def test_tablero_totales_columnas_del_catalogo_y_ocultos(client, revisor, datos):
-    TipoDocumento.objects.filter(codigo="certificados_eps_afp").update(activo=False)
+    TipoDocumento.objects.filter(codigo="certificado_afp").update(activo=False)
     html = entrar(client, revisor).get(reverse("tablero")).content.decode()
     assert "Ana Ejemplo" in html and "Beto Prueba" in html
     assert "Ido Ausente" not in html  # carpeta no presente: oculto por defecto
@@ -153,7 +153,7 @@ def test_tablero_totales_columnas_del_catalogo_y_ocultos(client, revisor, datos)
     ("filtros", "aparece", "no_aparece"),
     [
         ({"estado": "COMPLETO"}, "Ana Ejemplo", "Beto Prueba"),
-        ({"falta": "certificados_eps_afp"}, "Beto Prueba", "Ana Ejemplo"),
+        ({"falta": "certificado_afp"}, "Beto Prueba", "Ana Ejemplo"),
         ({"atencion": "1"}, "Beto Prueba", "Ana Ejemplo"),
         ({"q": "beto"}, "Beto Prueba", "Ana Ejemplo"),
         ({"q": "1000000001"}, "Ana Ejemplo", "Ido Ausente"),
@@ -218,7 +218,7 @@ def test_revision_invalida_muestra_el_error_y_no_guarda(client, revisor, datos):
 def test_corregir_el_tipo(client, revisor, datos):
     beto = datos["beto"]
     roto = beto.documentos.get(nombre_archivo="roto.pdf")
-    eps = TipoDocumento.objects.get(codigo="certificados_eps_afp")
+    eps = TipoDocumento.objects.get(codigo="certificado_afp")
     entrar(client, revisor).post(
         reverse("revisar", args=[beto.pk, roto.pk]),
         {"decision": "corregido", "comentario": "Es la EPS", "tipo_corregido": eps.pk},

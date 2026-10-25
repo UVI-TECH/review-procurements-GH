@@ -20,6 +20,17 @@ from .reglas import EstadoProfesor, evaluar_profesor, norm, revalidar_por_cedula
 
 RUTA_LEGADO = BASE_DIR / "legado" / "revisar_contrataciones.py"
 
+# El legado tiene un solo tipo de seguridad social; el motor separa EPS y AFP, y acepta
+# alternativas de pensión como alias de AFP (ADR 0006).
+TIPO_LEGADO_SEGURIDAD_SOCIAL = "certificados_eps_afp"
+CODIGOS_SEGURIDAD_SOCIAL = frozenset(
+    {"certificado_eps", "certificado_afp", "resolucion_pension_vejez", "carta_bono_pensional"}
+)
+
+
+def codigo_para_el_legado(codigo):
+    return TIPO_LEGADO_SEGURIDAD_SOCIAL if norm(codigo) in CODIGOS_SEGURIDAD_SOCIAL else codigo
+
 
 def cargar_legado():
     """Importa el script del legado desde su ruta, sin modificarlo.
@@ -59,7 +70,7 @@ def a_dict_legado(resultado):
             "observaciones": resultado.error or resultado.observaciones,
         }
     return {
-        "tipo_detectado": resultado.tipo_detectado,
+        "tipo_detectado": codigo_para_el_legado(resultado.tipo_detectado),
         "es_valido": resultado.es_valido,
         "numero_documento": resultado.numero_documento,
         "nombre_persona": resultado.nombre_persona,
@@ -89,8 +100,19 @@ def _reglas_del_legado(legado, profesor, dicts):
 def _tipo(catalogo, codigo):
     if norm(codigo) == "error":
         return "error"
+    if norm(codigo) == TIPO_LEGADO_SEGURIDAD_SOCIAL:  # inactivo en el motor nuevo
+        return TIPO_LEGADO_SEGURIDAD_SOCIAL
     tipo = catalogo.resolver(codigo)
     return tipo.codigo if tipo else "otro"
+
+
+def _mismo_tipo(viejo, nuevo):
+    if viejo == nuevo:
+        return True
+    # Un ilegible es el mismo archivo que en el legado falló en la API.
+    if viejo == "error" and nuevo == "ilegible":
+        return True
+    return viejo == TIPO_LEGADO_SEGURIDAD_SOCIAL and nuevo in CODIGOS_SEGURIDAD_SOCIAL
 
 
 def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
@@ -176,9 +198,7 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
                 "archivo": nuevo.nombre_archivo,
                 "legado": {"tipo": tipo_viejo, "es_valido": bool(viejo.get("es_valido"))},
                 "nuevo": {"tipo": tipo_nuevo, "es_valido": nuevo.es_valido},
-                # Un ilegible es el mismo archivo que en el legado falló en la API.
-                "coincide_tipo": tipo_viejo == tipo_nuevo
-                or (tipo_viejo == "error" and tipo_nuevo == "ilegible"),
+                "coincide_tipo": _mismo_tipo(tipo_viejo, tipo_nuevo),
                 "coincide_es_valido": bool(viejo.get("es_valido")) == nuevo.es_valido,
             }
         )

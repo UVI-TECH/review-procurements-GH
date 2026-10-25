@@ -160,20 +160,20 @@ def test_sin_ninguna_cedula_no_se_revalida():
 
 
 def test_documento_sin_cedula_no_se_toca_si_otros_la_tienen():
-    sin_cedula = doc("certificados_eps_afp", valido=False, cedula="")
-    revalidados, _ = procesar(completos(certificados_eps_afp=sin_cedula))
+    sin_cedula = doc("certificado_afp", valido=False, cedula="")
+    revalidados, _ = procesar(completos(certificado_afp=sin_cedula))
     assert sin_cedula in revalidados
 
 
 def test_falta_un_tipo_obligatorio_es_incompleto():
-    _, evaluacion = procesar(completos(certificados_eps_afp=None))
+    _, evaluacion = procesar(completos(certificado_afp=None))
     assert evaluacion.estado == EstadoProfesor.INCOMPLETO
-    assert [t.codigo for t in evaluacion.faltantes] == ["certificados_eps_afp"]
+    assert [t.codigo for t in evaluacion.faltantes] == ["certificado_afp"]
 
 
 def test_faltante_gana_sobre_problema():
     ajeno = doc("certificado_antecedentes_judiciales", cedula=OTRA)
-    docs = completos(certificados_eps_afp=None, certificado_antecedentes_judiciales=ajeno)
+    docs = completos(certificado_afp=None, certificado_antecedentes_judiciales=ajeno)
     _, evaluacion = procesar(docs)
     assert evaluacion.estado == EstadoProfesor.INCOMPLETO
     assert len(evaluacion.problemas) == 1
@@ -182,7 +182,7 @@ def test_faltante_gana_sobre_problema():
 def test_sin_documentos():
     _, evaluacion = procesar([])
     assert evaluacion.estado == EstadoProfesor.SIN_DOCUMENTOS
-    assert len(evaluacion.faltantes) == 9
+    assert len(evaluacion.faltantes) == len(CODIGOS)
 
 
 # --- Diferencia intencional 1: duplicados ---
@@ -198,16 +198,16 @@ def test_duplicado_invalido_no_deja_con_problemas_si_hay_uno_valido():
 
 
 def test_entre_duplicados_iguales_cuenta_el_mas_reciente():
-    viejo = doc("certificados_eps_afp", minutos=1)
-    nuevo = doc("certificados_eps_afp", minutos=9)
-    _, evaluacion = procesar(completos(certificados_eps_afp=viejo) + [nuevo])
-    assert evaluacion.vigentes["certificados_eps_afp"] == nuevo
+    viejo = doc("certificado_afp", minutos=1)
+    nuevo = doc("certificado_afp", minutos=9)
+    _, evaluacion = procesar(completos(certificado_afp=viejo) + [nuevo])
+    assert evaluacion.vigentes["certificado_afp"] == nuevo
 
 
 def test_duplicados_todos_invalidos_quedan_con_problemas():
-    a = doc("certificados_eps_afp", valido=False, cedula="", minutos=1)
-    b = doc("certificados_eps_afp", valido=False, cedula="", minutos=2)
-    _, evaluacion = procesar(completos(certificados_eps_afp=a) + [b])
+    a = doc("certificado_afp", valido=False, cedula="", minutos=1)
+    b = doc("certificado_afp", valido=False, cedula="", minutos=2)
+    _, evaluacion = procesar(completos(certificado_afp=a) + [b])
     assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
     assert evaluacion.problemas == (b,)
 
@@ -248,7 +248,7 @@ def test_empate_tampoco_rescata_invalidos():
 @pytest.mark.parametrize("tipo", ["otro", "carta_de_recomendacion"])
 def test_otro_no_cuenta_para_requisitos_y_queda_senalado(tipo):
     extra = doc(tipo, valido=False)
-    _, evaluacion = procesar(completos(certificados_eps_afp=None) + [extra])
+    _, evaluacion = procesar(completos(certificado_afp=None) + [extra])
     assert evaluacion.estado == EstadoProfesor.INCOMPLETO
     assert evaluacion.no_reconocidos == (extra,)
     assert extra not in evaluacion.problemas
@@ -262,22 +262,22 @@ def test_otro_no_impide_completo():
 
 
 def test_tipo_inactivo_se_trata_como_otro():
-    catalogo = catalogo_inicial(certificados_eps_afp={"activo": False})
+    catalogo = catalogo_inicial(certificado_afp={"activo": False})
     _, evaluacion = procesar(completos(), catalogo)
     assert evaluacion.estado == EstadoProfesor.COMPLETO
-    assert [r.tipo_detectado for r in evaluacion.no_reconocidos] == ["certificados_eps_afp"]
+    assert [r.tipo_detectado for r in evaluacion.no_reconocidos] == ["certificado_afp"]
 
 
 def test_tipo_no_obligatorio_ausente_no_es_faltante():
-    catalogo = catalogo_inicial(certificados_eps_afp={"obligatorio": False})
-    _, evaluacion = procesar(completos(certificados_eps_afp=None), catalogo)
+    catalogo = catalogo_inicial(certificado_afp={"obligatorio": False})
+    _, evaluacion = procesar(completos(certificado_afp=None), catalogo)
     assert evaluacion.estado == EstadoProfesor.COMPLETO
 
 
 def test_tipo_no_obligatorio_invalido_impide_completo():
-    catalogo = catalogo_inicial(certificados_eps_afp={"obligatorio": False})
-    invalido = doc("certificados_eps_afp", valido=False, cedula="")
-    _, evaluacion = procesar(completos(certificados_eps_afp=invalido), catalogo)
+    catalogo = catalogo_inicial(certificado_afp={"obligatorio": False})
+    invalido = doc("certificado_afp", valido=False, cedula="")
+    _, evaluacion = procesar(completos(certificado_afp=invalido), catalogo)
     assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
 
 
@@ -293,9 +293,9 @@ def test_error_en_duplicado_no_impide_completo():
 
 def test_error_sin_completo_es_error():
     fallido = doc("", valido=False, cedula="", error="Tiempo agotado")
-    _, evaluacion = procesar(completos(certificados_eps_afp=None) + [fallido])
+    _, evaluacion = procesar(completos(certificado_afp=None) + [fallido])
     assert evaluacion.estado == EstadoProfesor.ERROR
-    assert [t.codigo for t in evaluacion.faltantes] == ["certificados_eps_afp"]
+    assert [t.codigo for t in evaluacion.faltantes] == ["certificado_afp"]
 
 
 def test_error_nunca_es_vigente():
@@ -347,7 +347,7 @@ def ilegible(minutos=0):
 def test_ilegible_con_faltante_es_incompleto_no_error():
     """El caso real: un certificado de EPS con contraseña de usuario."""
     protegido = ilegible()
-    _, evaluacion = procesar(completos(certificados_eps_afp=None) + [protegido])
+    _, evaluacion = procesar(completos(certificado_afp=None) + [protegido])
     assert evaluacion.estado == EstadoProfesor.INCOMPLETO
     assert evaluacion.ilegibles == (protegido,)
     assert evaluacion.errores == ()
@@ -361,7 +361,7 @@ def test_ilegible_impide_completo():
 
 def test_ilegible_mas_error_transitorio_sin_completo_es_error():
     fallido = doc("", valido=False, cedula="", error="Tiempo agotado")
-    _, evaluacion = procesar(completos(certificados_eps_afp=None) + [ilegible(), fallido])
+    _, evaluacion = procesar(completos(certificado_afp=None) + [ilegible(), fallido])
     assert evaluacion.estado == EstadoProfesor.ERROR
 
 
@@ -413,10 +413,10 @@ def test_la_evidencia_decide_la_modal_y_la_ambiguedad():
 
 
 def test_el_validado_por_un_revisor_es_el_vigente_aunque_sea_mas_viejo():
-    revisado = replace(doc("certificados_eps_afp", minutos=1), validado_por_revisor=True)
-    mas_nuevo = doc("certificados_eps_afp", minutos=9)
-    _, evaluacion = procesar(completos(certificados_eps_afp=revisado) + [mas_nuevo])
-    assert evaluacion.vigentes["certificados_eps_afp"] == revisado
+    revisado = replace(doc("certificado_afp", minutos=1), validado_por_revisor=True)
+    mas_nuevo = doc("certificado_afp", minutos=9)
+    _, evaluacion = procesar(completos(certificado_afp=revisado) + [mas_nuevo])
+    assert evaluacion.vigentes["certificado_afp"] == revisado
 
 
 # --- Pendiente de análisis (ADR 0005) ---

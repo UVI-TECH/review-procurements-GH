@@ -14,11 +14,21 @@ from .models import (
 class AliasInline(admin.TabularInline):
     model = AliasTipoDocumento
     extra = 0
+    fields = ["codigo", "etiqueta", "hereda_vigencia", "vigencia_dias", "observacion"]
 
 
 @admin.register(TipoDocumento)
 class TipoDocumentoAdmin(admin.ModelAdmin):
-    list_display = ["orden", "codigo", "etiqueta", "obligatorio", "activo", "requiere_firma"]
+    list_display = [
+        "orden",
+        "codigo",
+        "etiqueta",
+        "obligatorio",
+        "activo",
+        "requiere_firma",
+        "vigencia_dias",
+        "requiere_logo",
+    ]
     list_display_links = ["codigo"]
     list_filter = ["activo", "obligatorio"]
     inlines = [AliasInline]

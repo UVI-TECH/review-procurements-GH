@@ -277,7 +277,7 @@ def test_pausa_simulada_solo_afecta_al_cliente_simulado(tmp_path, settings, monk
     pausas = []
     monkeypatch.setattr(time, "sleep", pausas.append)
     settings.MOTOR_SIMULADO_PAUSA_SEGUNDOS = 0.3
-    ruta = crear_pdf(tmp_path / "certificados_eps_afp.pdf")
+    ruta = crear_pdf(tmp_path / "certificado_afp.pdf")
     ClienteSimulado(catalogo_inicial()).analizar(ruta, "P")
     assert pausas == [0.3]
     pausas.clear()

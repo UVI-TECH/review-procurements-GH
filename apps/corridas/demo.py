@@ -84,7 +84,7 @@ def _perfil(indice, codigos, cedula):
     if indice < 24:  # "otro": un documento que no es requisito
         return [*completo[:-1], f"carta de recomendacion cc_{cedula}.pdf"]
     if indice < 26:  # duplicados del mismo tipo
-        return [*completo, f"certificados_eps_afp copia cc_{cedula}.pdf"]
+        return [*completo, f"certificado_afp copia cc_{cedula}.pdf"]
     if indice == 26:  # reintentos agotados, y falta un tipo
         return [*completo[:-1], f"error_api cc_{cedula}.pdf"]
     if indice == 27:  # reintentos agotados en un duplicado

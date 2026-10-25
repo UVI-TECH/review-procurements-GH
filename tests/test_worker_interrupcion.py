@@ -15,6 +15,9 @@ import pytest
 
 from config.entorno import BASE_DIR
 from tests.fixtures.carpetas import crear_profesor
+from tests.fixtures.catalogo import CODIGOS
+
+TOTAL = 2 * len(CODIGOS)  # dos profesores con un PDF por tipo
 
 PREPARAR = (
     "from django.contrib.auth.models import Group;"
@@ -94,7 +97,7 @@ def test_ctrl_c_detiene_limpio_y_la_corrida_se_reanuda(entorno):
         salida = []
         for linea in worker.stdout:
             salida.append(linea)
-            if " · 3/18 · " in linea:
+            if f" · 3/{TOTAL} · " in linea:
                 break
         else:
             pytest.fail(
@@ -114,11 +117,11 @@ def test_ctrl_c_detiene_limpio_y_la_corrida_se_reanuda(entorno):
         in salida
     )
     estado, cantidad, _ = manage(entorno, "shell", "--no-imports", "-c", VERIFICAR).split()
-    assert estado == "en_proceso" and 3 <= int(cantidad) < 18
+    assert estado == "en_proceso" and 3 <= int(cantidad) < TOTAL
 
     manage(entorno, "worker", "--una-vez")
     assert manage(entorno, "shell", "--no-imports", "-c", VERIFICAR).split() == [
         "completada",
-        "18",
+        str(TOTAL),
         "1",
     ]

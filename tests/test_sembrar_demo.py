@@ -33,8 +33,7 @@ def test_genera_todos_los_estados(entorno, capsys):
     assert Documento.objects.filter(reintentos_agotados=True).exists()
     assert profesores.filter(requiere_atencion=True).exists()
     assert any(
-        len([d for d in p.documentos.all() if d.nombre_archivo.startswith("certificados_eps_afp")])
-        > 1
+        len([d for d in p.documentos.all() if d.nombre_archivo.startswith("certificado_afp")]) > 1
         for p in profesores
     ), "debe haber duplicados"
     salida = capsys.readouterr().out

@@ -6,6 +6,7 @@ import pytest
 from django.core.management import CommandError, call_command
 
 from apps.motor.comparacion import (
+    CODIGOS_SEGURIDAD_SOCIAL,
     a_dict_legado,
     cargar_legado,
     comparar_profesor,
@@ -89,7 +90,9 @@ def test_el_legado_se_carga_sin_modificar_el_archivo(legado):
         Path(legado.__file__).resolve()
         == (BASE_DIR / "legado" / "revisar_contrataciones.py").resolve()
     )
-    assert [codigo for codigo, _ in legado.DOCS] == CODIGOS
+    # El legado tiene un solo tipo de seguridad social; el motor, EPS y AFP (ADR 0006).
+    nuevos = [c for c in CODIGOS if c not in CODIGOS_SEGURIDAD_SOCIAL]
+    assert [codigo for codigo, _ in legado.DOCS] == [*nuevos[:7], "certificados_eps_afp", nuevos[7]]
 
 
 def resultado(tipo, valido=True, cedula=CEDULA, archivo=None, minutos=0, firma=None, error=""):
@@ -144,11 +147,9 @@ def test_sin_diferencias(legado):
 
 def test_duplicado_es_diferencia_intencional(legado):
     """El legado se queda con el último del tipo; el motor nuevo, con el vigente."""
-    valido = resultado("certificados_eps_afp", archivo="eps_a.pdf", minutos=1)
-    invalido = resultado(
-        "certificados_eps_afp", valido=False, cedula="", archivo="eps_b.pdf", minutos=2
-    )
-    nuevos = completos(certificados_eps_afp=valido) + [invalido]
+    valido = resultado("certificado_afp", archivo="eps_a.pdf", minutos=1)
+    invalido = resultado("certificado_afp", valido=False, cedula="", archivo="eps_b.pdf", minutos=2)
+    nuevos = completos(certificado_afp=valido) + [invalido]
     informe = comparar_profesor(
         "P", [a_dict_legado(r) for r in nuevos], nuevos, catalogo_inicial(), legado
     )
@@ -198,9 +199,7 @@ def test_sin_pdfs(legado):
 
 def test_con_problemas_frente_a_incompleto_es_intencional(legado):
     """Un vigente inválido: el legado dice INCOMPLETO y el motor nuevo, CON_PROBLEMAS."""
-    nuevos = completos(
-        certificados_eps_afp=resultado("certificados_eps_afp", valido=False, cedula="")
-    )
+    nuevos = completos(certificado_afp=resultado("certificado_afp", valido=False, cedula=""))
     informe = comparar_profesor(
         "P", [a_dict_legado(r) for r in nuevos], nuevos, catalogo_inicial(), legado
     )
@@ -263,7 +262,7 @@ def test_resumen_cuenta_el_estado_detallado_distinto(legado):
     assert resumen["profesores"] == 2
     assert resumen["estado_coincide"] == 2
     assert resumen["estado_detallado_difiere"] == 1
-    assert resumen["documentos"] == 9
+    assert resumen["documentos"] == len(CODIGOS)
 
 
 @pytest.mark.parametrize("comando", ["probar_motor", "comparar_con_legado"])
@@ -296,7 +295,7 @@ def test_ilegible_es_diferencia_intencional(legado):
     protegido = ResultadoDocumento.ilegible(
         "eps.pdf", "PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña."
     )
-    nuevos = [r for r in completos() if r.tipo_detectado != "certificados_eps_afp"] + [protegido]
+    nuevos = [r for r in completos() if r.tipo_detectado != "certificado_afp"] + [protegido]
     viejos = [a_dict_legado(r) for r in nuevos]
     assert viejos[-1]["tipo_detectado"] == "ERROR"
     informe = comparar_profesor("P", viejos, nuevos, catalogo_inicial(), legado)

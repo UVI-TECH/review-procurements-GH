@@ -63,7 +63,7 @@ def datos_navegador(tmp_path, settings, crear_usuario, corrida):
     ana = Profesor.objects.create(carpeta="DEMO ANA", nombre="Ana Ejemplo")
     completo(ana, corrida)
     beto = Profesor.objects.create(carpeta="DEMO BETO", nombre="Beto Prueba")
-    completo(beto, corrida, certificados_eps_afp=None)
+    completo(beto, corrida, certificado_afp=None)
     documento(beto, corrida, Analisis.TIPO_ILEGIBLE, valido=False, cedula="", nombre="roto.pdf")
     # Completo, pero con un archivo nuevo aún sin analizar: PENDIENTE_ANALISIS.
     ciro = Profesor.objects.create(carpeta="DEMO CIRO", nombre="Ciro Pendiente")
