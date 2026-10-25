@@ -48,7 +48,7 @@ Es el criterio de aceptación de la Fase 4: **la persona de Gestión Humana comp
 ### 3. Revisar un documento y decidir
 **Escenario:** "A un profesor con problemas, la IA le marcó un documento como inválido. Revísalo y decide."
 **Meta:** abrir el detalle de un profesor CON PROBLEMAS, ver el PDF del documento inválido y aprobarlo o rechazarlo con un comentario.
-**Éxito:** queda guardada una revisión, y el mensaje de confirmación aparece.
+**Éxito:** queda guardada una revisión, y aparece el aviso de confirmación en la esquina.
 **Observar:**
 - ¿Encuentra el documento con problema en la lista?
 - ¿El PDF se ve al lado y es legible?
@@ -113,10 +113,12 @@ Los críticos y los mayores se corrigen antes de cerrar la fase.
 
 ## Prueba técnica en el navegador (antes de la sesión)
 
-Estas comprobaciones no las cubre CI. Se hacen en Edge y en Chrome de Windows:
+En Chromium las cubre el job `navegador` de CI (`tests/navegador/`) en cada PR: falla ante cualquier violación de la CSP o recurso que no carga. A mano quedan Edge y Chrome de Windows, que es como trabajará la persona de Gestión Humana:
 
 - **El visor de PDF en el iframe** del detalle se ve con la CSP de la app (`frame-src 'self'`) y con la del PDF (`frame-ancestors 'self'`).
 - **"Abrir el PDF en otra pestaña"** funciona.
 - **La consola del navegador (F12)** no muestra violaciones de la CSP en el tablero, el detalle ni el inicio de sesión.
 - **Los filtros del tablero** actualizan los resultados sin recargar la página, y los botones Atrás y Adelante del navegador funcionan.
 - **La fuente Atkinson Hyperlegible Next** se carga. Si falla, se usa Segoe UI sin romper el diseño.
+- **Los avisos** aparecen en la esquina, se cierran solos y con la ×, y el Narrador de Windows los lee.
+- **El tooltip** de los encabezados verticales del tablero aparece con el mouse y con Tab, y se oculta con Escape.
