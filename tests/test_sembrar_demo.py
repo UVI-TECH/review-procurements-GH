@@ -19,7 +19,7 @@ def entorno(tmp_path, settings, crear_usuario):
 def test_genera_todos_los_estados(entorno, capsys):
     call_command("sembrar_demo", "--usuario", "revisor")
     profesores = Profesor.objects.all()
-    assert 25 <= profesores.count() <= 35
+    assert 30 <= profesores.count() <= 40
     estados = set(profesores.values_list("estado", flat=True))
     assert {
         EstadoProfesor.COMPLETO,
@@ -93,3 +93,39 @@ def test_pendientes_de_analisis_en_la_demo(entorno):
         EstadoProfesor.INCOMPLETO,
     }
     assert not Profesor.objects.filter(estado=EstadoProfesor.ERROR, documentos__in=sin_analizar)
+
+
+def test_casos_de_los_requisitos_2026_2(entorno):
+    """EPS/AFP separados y combinados, pensión, bono, vencido, por vencer y fecha ilegible."""
+    from apps.contrataciones.servicios.estado import evaluar
+    from apps.motor.catalogo import cargar_catalogo
+
+    call_command("sembrar_demo", "--usuario", "revisor")
+    catalogo = cargar_catalogo()
+    por_nombre = {p.carpeta.split(" - ", 1)[1]: p for p in Profesor.objects.all()}
+
+    def caso(nombre):
+        profesor = por_nombre[nombre]
+        return profesor, *evaluar(profesor, catalogo)
+
+    profesor, evaluacion, _ = caso("Fernanda Ejemplo Cerro")  # combinado
+    assert profesor.estado == EstadoProfesor.COMPLETO
+    assert evaluacion.vigentes["certificado_eps"] is evaluacion.vigentes["certificado_afp"]
+    for nombre, alias in [
+        ("Gustavo Prueba Delta", "resolucion_pension_vejez"),
+        ("Helena Muestra Bahia", "carta_bono_pensional"),
+    ]:
+        profesor, evaluacion, _ = caso(nombre)
+        assert profesor.estado == EstadoProfesor.COMPLETO
+        assert evaluacion.vigentes["certificado_afp"].tipo_detectado == alias
+    profesor, evaluacion, _ = caso("Ivan Ficticio Meseta")  # solo EPS
+    assert profesor.estado == EstadoProfesor.INCOMPLETO
+    assert [t.codigo for t in evaluacion.faltantes] == ["certificado_afp"]
+    profesor, _, evaluados = caso("Juana Demo Laguna")
+    assert profesor.estado == EstadoProfesor.CON_PROBLEMAS
+    assert any(e.resultado_ia.vencido for e in evaluados)
+    profesor, evaluacion, _ = caso("Kevin Simulado Ribera")
+    assert profesor.estado == EstadoProfesor.COMPLETO and evaluacion.por_vencer
+    profesor, evaluacion, _ = caso("Lorena Ejemplo Pradera")
+    assert profesor.estado == EstadoProfesor.COMPLETO and evaluacion.fechas_sin_leer
+    assert profesor.requiere_atencion

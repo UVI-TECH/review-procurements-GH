@@ -44,6 +44,14 @@ NOMBRES = [
     "Camilo Ficticio Sierra",
     "Diana Demo Llano",
     "Esteban Simulado Pampa",
+    # Requisitos de Gestión Humana 2026-2 (ADR 0006)
+    "Fernanda Ejemplo Cerro",
+    "Gustavo Prueba Delta",
+    "Helena Muestra Bahia",
+    "Ivan Ficticio Meseta",
+    "Juana Demo Laguna",
+    "Kevin Simulado Ribera",
+    "Lorena Ejemplo Pradera",
 ]
 
 
@@ -89,7 +97,30 @@ def _perfil(indice, codigos, cedula):
         return [*completo[:-1], f"error_api cc_{cedula}.pdf"]
     if indice == 27:  # reintentos agotados en un duplicado
         return [*completo, f"error_api cc_{cedula}.pdf"]
-    return []  # sin documentos
+    if indice < 30:  # sin documentos
+        return []
+
+    def sin(*quitar):
+        return [n for n in completo if not n.startswith(tuple(f"{q} " for q in quitar))]
+
+    if indice == 30:  # un solo PDF con EPS y pensión: cumple los dos
+        return [
+            *sin("certificado_eps", "certificado_afp"),
+            f"certificado_eps combinado cc_{cedula}.pdf",
+        ]
+    if indice == 31:  # pensionado: la resolución de pensión cumple AFP
+        return [*sin("certificado_afp"), f"resolucion_pension_vejez cc_{cedula}.pdf"]
+    if indice == 32:  # carta de bono pensional: cumple AFP, con observación
+        return [*sin("certificado_afp"), f"carta_bono_pensional cc_{cedula}.pdf"]
+    if indice == 33:  # solo EPS, sin pensión: INCOMPLETO
+        return sin("certificado_afp")
+    if indice == 34:  # un certificado vencido: CON_PROBLEMAS
+        return [*sin("certificado_eps"), f"certificado_eps vencido cc_{cedula}.pdf"]
+    if indice == 35:  # un certificado por vencer: COMPLETO, con aviso
+        return [*sin("certificado_afp"), f"certificado_afp por_vencer cc_{cedula}.pdf"]
+    # Fecha ilegible: COMPLETO, pero requiere atención.
+    judicial = "certificado_antecedentes_judiciales"
+    return [*sin(judicial), f"{judicial} fecha_ilegible cc_{cedula}.pdf"]
 
 
 def generar_carpeta(raiz, codigos):

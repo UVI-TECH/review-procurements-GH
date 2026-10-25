@@ -59,6 +59,7 @@ export DJANGO_SECRET_KEY=$(uv run python -c "import secrets; print(secrets.token
   - Los mensajes del worker en consola muestran solo id, alcance y contadores, nunca nombres de profesores ni de archivos. Ctrl+C lanza `WorkerDetenido` y deja la corrida reanudable.
 - Revisión e interfaz (ver `docs/decisiones/0005-revision-humana-e-interfaz.md`): las acciones del revisor están en `contrataciones/servicios/revisiones.py` y el estado con revisiones en `servicios/estado.py`. Toda página lleva CSP estricta y `no-store` (`apps/comun/middleware.py`): nada de scripts ni atributos `style` en línea, ni `hx-on`. HTMX y las fuentes vienen de `static/vendor/`, con hashes fijados por pruebas. El JavaScript propio va en `static/js/app.js` (avisos y tooltips), sin librerías ni `innerHTML`; los mensajes de Django en respuestas HTMX viajan en `HX-Trigger` (`AvisosHtmx`).
   - En pruebas, el worker se ejecuta con `ejecutar_worker(una_vez=True, fuente=..., crear_cliente=...)` y el cliente simulado, sobre carpetas sintéticas en `tmp_path` (`tests/fixtures/carpetas.py`).
+- Requisitos de Gestión Humana 2026-2 (ver `docs/decisiones/0006-requisitos-gestion-humana-2026-2.md` y `docs/instructivo-2026-02.md`): EPS y AFP son tipos separados (un PDF con `cubre="ambos"` cumple los dos) y las alternativas de pensión son alias de AFP con etiqueta propia. La IA solo extrae `fecha_expedicion`; la vigencia la decide `reglas.aplicar_vigencia` contra una fecha explícita (en la app, hoy en America/Bogota), siempre después de la revalidación por cédula. El worker recalcula todos los estados al arrancar y cada 24 h. El logo (`tiene_logo_oficial`, `es_plantilla_institucional`) solo se observa: no cambia `es_valido`. Al cambiar el prompt o el esquema, en entornos con análisis previos hay que lanzar una corrida `todos` (ver `docs/despliegue-windows.md`).
 - Los PDFs no son de confianza. Cualquier fallo al leerlos o analizarlos se devuelve como un `ResultadoDocumento`, nunca como una excepción: con `error` si es transitorio (API, red; se reanaliza) o como ilegible si es un problema permanente del archivo (contraseña, dañado, límites), con una observación que dice qué pedir.
 - `AUTH_USER_MODEL = "cuentas.Usuario"` (subclase de `AbstractUser`) existe desde la migración `0001`. Nunca uses `django.contrib.auth.models.User`; usa `get_user_model()` o `settings.AUTH_USER_MODEL`.
 - `legado/` es solo referencia: no se modifica y está excluido de ruff.
@@ -106,7 +107,8 @@ Límites conocidos:
 
 ## CI
 
-`.github/workflows/ci.yml` tiene cuatro jobs:
+`.github/workflows/ci.yml` tiene cuatro jobs. Las imágenes van fijas (`ubuntu-24.04` y `windows-2025-vs2026`, la que usaba `windows-latest` en octubre de 2026), para que un cambio de imagen de GitHub no rompa CI antes del lote de diciembre. **Después de diciembre de 2026, revisar si conviene actualizarlas.**
+
 
 - **gitleaks:** revisa el historial completo en todas las ramas. Su versión se lee de `.pre-commit-config.yaml`; si la cambias, cámbiala solo allí.
 - **ruff:** solo en Ubuntu.

@@ -284,3 +284,27 @@ def test_pausa_simulada_solo_afecta_al_cliente_simulado(tmp_path, settings, monk
     pausas.clear()
     cliente(SdkFalso(respuesta(entrada()))).analizar(ruta, "P")
     assert pausas == []
+
+
+@pytest.mark.parametrize(
+    ("archivo", "dias", "cubre", "logo"),
+    [
+        ("certificado_eps.pdf", 3, "eps", True),
+        ("certificado_eps combinado.pdf", 3, "ambos", True),
+        ("certificado_afp vencido.pdf", 45, "afp", True),
+        ("certificado_afp por_vencer.pdf", 25, "afp", True),
+        ("carta_bono_pensional.pdf", 3, "afp", True),
+        ("resolucion_pension_vejez sin_logo.pdf", 3, "afp", False),
+        ("certificado_antecedentes_judiciales fecha_ilegible.pdf", None, "", True),
+    ],
+)
+def test_simulado_fecha_cobertura_y_logo(tmp_path, archivo, dias, cubre, logo):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    resultado = ClienteSimulado(catalogo_inicial()).analizar(crear_pdf(tmp_path / archivo), "P")
+    esperada = None if dias is None else timezone.localdate() - timedelta(days=dias)
+    assert resultado.fecha_expedicion == esperada
+    assert resultado.cubre == cubre
+    assert resultado.tiene_logo_oficial is logo

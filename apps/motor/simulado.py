@@ -8,6 +8,10 @@ Convenciones (sobre el nombre normalizado, sin .pdf):
 - "invalido": la IA lo marca inválido (p. ej. por no traer nombre).
 - "sin_firma": en un tipo que exige firma, sin firma e inválido.
 - "error_api": error de la API. "respuesta_malformada": respuesta fuera del esquema.
+- Fecha de expedición, contada desde hoy (America/Bogota): por defecto hace 3 días;
+  "vencido", hace 45; "por_vencer", hace 25; "fecha_ilegible", sin fecha (ADR 0006).
+- EPS, AFP y las alternativas de pensión reportan qué cubren; "combinado" cubre los dos.
+- "sin_logo": no se ve el logo de la entidad.
 """
 
 import re
@@ -25,6 +29,8 @@ from .resultado import ResultadoDocumento
 CEDULA_SIMULADA = "1000000001"
 CEDULA_OTRA_PERSONA = "1000000099"
 MODELO_SIMULADO = "simulado"
+# Las alternativas de pensión son alias de certificado_afp: el tipo resuelto es AFP.
+COBERTURA = {"certificado_eps": "eps", "certificado_afp": "afp"}
 
 
 class ClienteSimulado(ClienteBase):
@@ -67,20 +73,20 @@ class ClienteSimulado(ClienteBase):
         es_valido = not (
             codigo == TIPO_OTRO or sin_firma or "invalido" in nombre or "otra_persona" in nombre
         )
-        cubre = (
-            {"certificado_eps": "eps", "certificado_afp": "afp"}.get(tipo.codigo) if tipo else None
-        )
-        # Expedido hace pocos días (America/Bogota): vigente.
-        expedicion = timezone.localdate() - timedelta(days=3)
+        cubre = COBERTURA.get(tipo.codigo) if tipo else None
+        if cubre and "combinado" in nombre:
+            cubre = "ambos"
+        dias = 45 if "vencido" in nombre else 25 if "por_vencer" in nombre else 3
+        expedicion = None if "fecha_ilegible" in nombre else timezone.localdate() - timedelta(dias)
         return {
             "tipo_detectado": codigo,
             "es_valido": es_valido,
             "numero_documento": cedula,
             "nombre_persona": "Persona Ficticia" if "otra_persona" in nombre else "",
             "tiene_firma": (not sin_firma) if exige_firma else None,
-            "fecha_expedicion": expedicion.isoformat(),
+            "fecha_expedicion": expedicion.isoformat() if expedicion else None,
             "cubre": cubre,
-            "tiene_logo_oficial": True,
+            "tiene_logo_oficial": "sin_logo" not in nombre,
             "es_plantilla_institucional": True if exige_firma else None,
             "observaciones": "Respuesta simulada.",
         }
