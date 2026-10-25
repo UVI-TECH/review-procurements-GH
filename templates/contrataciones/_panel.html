@@ -3,11 +3,11 @@
   <h2 id="titulo-panel">{{ e.documento.nombre_archivo }}</h2>
 
   <dl class="datos datos-documento">
-    <div><dt>La IA dice</dt><dd>{{ elegido.tipo_ia }}{% if e.analisis %} · {% if e.resultado_ia.es_valido %}válido{% elif e.resultado_ia.es_error %}error{% else %}inválido{% endif %}{% endif %}</dd></div>
+    <div><dt>La IA dice</dt><dd>{% if elegido.pendiente %}<span class="insignia semaforo-pendiente"><span aria-hidden="true">⏳</span> Pendiente de análisis</span> Se analizará en la próxima corrida.{% else %}{{ elegido.tipo_ia }} · {% if e.resultado_ia.es_valido %}válido{% elif e.resultado_ia.es_error %}error{% else %}inválido{% endif %}{% endif %}</dd></div>
     {% if e.analisis.numero_documento %}<div><dt>Cédula en el documento</dt><dd class="cedula">{{ e.analisis.numero_documento }}</dd></div>{% endif %}
     {% if e.analisis.nombre_persona %}<div><dt>Nombre en el documento</dt><dd>{{ e.analisis.nombre_persona }}</dd></div>{% endif %}
     {% if e.resultado_ia.observaciones %}<div><dt>Observaciones</dt><dd>{{ e.resultado_ia.observaciones }}</dd></div>{% endif %}
-    {% if e.resultado_ia.es_error %}<div><dt>Error</dt><dd>{{ e.resultado_ia.error }}</dd></div>{% endif %}
+    {% if e.resultado_ia.es_error and not elegido.pendiente %}<div><dt>Error</dt><dd>{{ e.resultado_ia.error }}</dd></div>{% endif %}
     <div><dt>Revisión vigente</dt><dd>
       {% if e.revision %}{{ e.revision.get_decision_display }}{% if e.revision.tipo_corregido %} como «{{ e.revision.tipo_corregido.etiqueta }}»{% endif %} por {{ e.revision.usuario.get_full_name|default:e.revision.usuario.username }}, {{ e.revision.fecha|date:"j M Y, H:i" }}{% if e.revision.comentario %}: «{{ e.revision.comentario }}»{% endif %}
       {% else %}Sin revisión: cuenta lo que dice la IA.{% endif %}

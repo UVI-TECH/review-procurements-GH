@@ -47,6 +47,10 @@
       <input type="checkbox" id="ocultos" name="ocultos" value="1"{% if filtros.ocultos %} checked{% endif %}>
       <label for="ocultos">También carpetas que ya no están</label>
     </div>
+    <div class="campo campo-casilla">
+      <input type="checkbox" id="pendientes" name="pendientes" value="1"{% if filtros.pendientes %} checked{% endif %}>
+      <label for="pendientes">Solo con documentos pendientes de análisis</label>
+    </div>
   </fieldset>
   <button type="submit" class="boton">Filtrar</button>
   <span class="cargando htmx-indicator" aria-hidden="true">Cargando…</span>

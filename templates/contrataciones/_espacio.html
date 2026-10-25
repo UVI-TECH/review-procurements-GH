@@ -10,10 +10,15 @@
            hx-get="?documento={{ e.documento.pk }}" hx-target="#espacio" hx-swap="outerHTML" hx-push-url="true"
            {% if elegido and elegido.evaluado.documento.pk == e.documento.pk %}aria-current="true"{% endif %}>
           <span class="documento-nombre">{{ e.documento.nombre_archivo }}</span>
+          {% if d.pendiente %}
+          <span class="documento-tipo">Aún sin analizar</span>
+          <span class="insignia semaforo-pendiente"><span aria-hidden="true">⏳</span> Pendiente de análisis</span>
+          {% else %}
           <span class="documento-tipo">{{ d.tipo_efectivo }}</span>
           {% if d.valido is True %}<span class="insignia semaforo-valido">✓ Válido</span>
           {% elif d.valido is False %}<span class="insignia semaforo-invalido">✗ {% if e.resultado.es_error %}Error{% elif e.resultado.es_ilegible %}Ilegible{% else %}Inválido{% endif %}</span>
           {% else %}<span class="insignia">Descartado</span>{% endif %}
+          {% endif %}
           {% if e.revision %}<span class="etiqueta">Revisado: {{ e.revision.get_decision_display|lower }}</span>{% endif %}
           {% if e.documento.reintentos_agotados %}<span class="etiqueta etiqueta-atencion">Reintentos agotados</span>{% endif %}
         </a>

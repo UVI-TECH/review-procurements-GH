@@ -20,6 +20,9 @@
         {% else %}<span class="insignia verificacion-pendiente">Pendiente</span>{% endif %}
       </dd></div>
     </dl>
+    {% if por_analizar %}
+      <p class="aviso aviso-pendiente"><strong>{{ por_analizar }} documento{{ por_analizar|pluralize }} pendiente{{ por_analizar|pluralize }} de análisis.</strong> El estado y lo que falta pueden cambiar cuando se analice{{ por_analizar|pluralize:"n" }}.</p>
+    {% endif %}
     {% if evaluacion.faltantes %}
       <p class="aviso"><strong>Faltan:</strong> {% for tipo in evaluacion.faltantes %}{{ tipo.etiqueta }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
     {% endif %}

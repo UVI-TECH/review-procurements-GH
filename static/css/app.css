@@ -42,6 +42,8 @@
   --faltante-fondo: #fbebc8;
   --neutro: #4a5470;
   --neutro-fondo: #ebe6db;
+  --pendiente: #1f4e79;
+  --pendiente-fondo: #e4edf6;
   --error: #5b2a86;
   --error-fondo: #eee6f6;
 
@@ -567,6 +569,18 @@ legend {
 .semaforo-faltante {
   color: var(--faltante);
   background: var(--faltante-fondo);
+}
+
+.semaforo-pendiente,
+.etiqueta-pendiente {
+  color: var(--pendiente);
+  background: var(--pendiente-fondo);
+  border-color: var(--pendiente);
+}
+
+.aviso-pendiente {
+  border-color: var(--pendiente);
+  background: var(--pendiente-fondo);
 }
 
 .semaforo-ausente,

@@ -20,6 +20,7 @@
         {% if puede_ver_detalle %}<a href="{% url 'detalle' p.pk %}">{{ p.nombre }}</a>{% else %}{{ p.nombre }}{% endif %}
         {% if not p.carpeta_presente %}<span class="etiqueta">Carpeta ya no está</span>{% endif %}
         {% if p.requiere_atencion %}<span class="etiqueta etiqueta-atencion">Requiere atención</span>{% endif %}
+        {% if p.por_analizar %}<span class="etiqueta etiqueta-pendiente">{{ p.por_analizar }} pendiente{{ p.por_analizar|pluralize }} de análisis</span>{% endif %}
       </th>
       {% if ve_cedulas %}<td class="cedula">{{ p.cedula_confirmada|default:p.cedula|default:"—" }}</td>{% endif %}
       <td><span class="insignia estado-{{ p.estado|lower }}">{{ p.get_estado_display }}</span></td>

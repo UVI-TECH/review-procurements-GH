@@ -575,3 +575,72 @@ def test_el_detalle_sin_elegir_resalta_el_primer_documento(client, revisor, dato
     primero = ana.documentos.order_by("ruta_relativa").first()
     html = entrar(client, revisor).get(reverse("detalle", args=[ana.pk])).content.decode()
     assert re.findall(r'<a id="doc-(\d+)"[^>]*aria-current="true"', html) == [str(primero.pk)]
+
+
+# --- Pendientes de análisis ---
+
+
+def _sin_analizar(profesor, nombre="nuevo.pdf", **extra):
+    from django.utils import timezone
+
+    return Documento.objects.create(
+        profesor=profesor,
+        ruta_relativa=f"{profesor.carpeta}/{nombre}",
+        nombre_archivo=nombre,
+        sha256=hashlib.sha256(nombre.encode()).hexdigest(),
+        tamano=10,
+        modificado_en=timezone.now(),
+        **extra,
+    )
+
+
+def test_tablero_cuenta_y_filtra_pendientes_de_analisis(client, revisor, datos):
+    ana, beto = datos["ana"], datos["beto"]
+    _sin_analizar(ana, "nuevo1.pdf")
+    _sin_analizar(ana, "nuevo2.pdf")
+    _sin_analizar(beto, "viejo.pdf", presente=False)  # ya no está: no cuenta
+    # Analizado, pero el archivo cambió después: su sha256 actual está pendiente.
+    cambiado = beto.documentos.filter(presente=True).first()
+    cambiado.sha256 = "f" * 64
+    cambiado.save()
+    entrar(client, revisor)
+    html = client.get(reverse("tablero")).content.decode()
+    assert "2 pendientes de análisis" in html
+    assert "1 pendiente de análisis" in html
+    html = client.get(reverse("tablero"), {"pendientes": "1"}).content.decode()
+    assert "Ana Ejemplo" in html and "Beto Prueba" in html
+    cambiado.sha256 = Analisis.objects.filter(documento=cambiado).first().sha256
+    cambiado.save()
+    html = client.get(reverse("tablero"), {"pendientes": "1"}).content.decode()
+    assert "Ana Ejemplo" in html and "Beto Prueba" not in html
+    assert 'id="pendientes"' in html
+
+
+def test_un_error_de_analisis_no_es_pendiente(client, revisor, datos, corrida):
+    nuevo = _sin_analizar(datos["ana"], "fallo.pdf")
+    Analisis.objects.create(
+        documento=nuevo,
+        corrida=corrida,
+        sha256=nuevo.sha256,
+        modelo="simulado",
+        tipo_detectado=Analisis.TIPO_ERROR,
+        es_valido=False,
+        observaciones="Red caída.",
+    )
+    html = entrar(client, revisor).get(reverse("tablero"), {"pendientes": "1"}).content.decode()
+    assert "Ana Ejemplo" not in html
+
+
+def test_detalle_muestra_pendiente_y_no_error(client, revisor, datos):
+    ana = datos["ana"]
+    nuevo = _sin_analizar(ana, "zz-nuevo.pdf")
+    entrar(client, revisor)
+    html = client.get(reverse("detalle", args=[ana.pk])).content.decode()
+    assert "1 documento pendiente de análisis." in html
+    html = client.get(reverse("detalle", args=[ana.pk]), {"documento": nuevo.pk}).content.decode()
+    inicio = html.index(f'id="doc-{nuevo.pk}"')
+    enlace = html[inicio : html.index("</a>", inicio)]
+    assert "Pendiente de análisis" in enlace and "Error" not in enlace
+    panel = html[html.index('id="panel"') :]
+    assert "Se analizará en la próxima corrida." in panel
+    assert "<dt>Error</dt>" not in panel
