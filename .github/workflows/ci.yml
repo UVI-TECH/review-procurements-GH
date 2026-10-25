@@ -78,3 +78,29 @@ jobs:
 
       - run: uv run python manage.py check
       - run: uv run pytest
+
+  navegador:
+    name: Navegador (Chromium)
+    # Playwright con Chromium real: login, tablero, detalle con el PDF y una revisión.
+    # Falla ante cualquier violación de CSP o recurso que no carga (tests/navegador/).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Instalar Chromium (versión fijada por playwright en uv.lock)
+        run: uv run playwright install --with-deps chromium
+
+      - name: Generar DJANGO_SECRET_KEY efímera
+        run: |
+          clave=$(uv run python -c "import secrets; print(secrets.token_urlsafe(50))")
+          echo "::add-mask::$clave"
+          echo "DJANGO_SECRET_KEY=$clave" >> "$GITHUB_ENV"
+
+      # channel chromium: el modo headless nuevo, con el visor de PDF del navegador.
+      - run: uv run pytest -m navegador --browser chromium --browser-channel chromium

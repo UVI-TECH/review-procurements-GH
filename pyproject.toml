@@ -17,6 +17,7 @@ dependencies = [
 dev = [
     "pre-commit>=4.7.0",
     "pytest-django>=4.14.0",
+    "pytest-playwright>=0.10.0",
     "ruff>=0.17.1",
 ]
 
@@ -33,4 +34,6 @@ select = ["E", "F", "W", "I", "UP", "B", "DJ"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.pruebas"
 testpaths = ["tests"]
-addopts = "-ra"
+# Las pruebas de navegador (Chromium) solo corren en CI: uv run pytest -m navegador.
+addopts = "-ra -m 'not navegador'"
+markers = ["navegador: Playwright con Chromium real; solo en CI (job Navegador)"]
