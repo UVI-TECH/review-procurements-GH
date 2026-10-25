@@ -762,3 +762,23 @@ legend {
     transition: opacity 200ms ease-in;
   }
 }
+
+/* --- Páginas de error --- */
+
+.error-pagina {
+  max-width: 36rem;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: #fff;
+  border-top: 6px solid var(--acento);
+  box-shadow: var(--sombra);
+}
+
+.error-codigo {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--acento);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo_error }}{% endblock %}
+{% block contenido %}
+<section class="error-pagina" aria-labelledby="titulo-error">
+  <p class="error-codigo" aria-hidden="true">{{ codigo_error }}</p>
+  <h1 id="titulo-error">{{ titulo_error }}</h1>
+  {% block explicacion %}{% endblock %}
+  <p><a class="boton boton-principal" href="{% url 'tablero' %}">Volver al tablero</a></p>
+</section>
+{% endblock %}

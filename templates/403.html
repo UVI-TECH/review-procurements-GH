@@ -1,0 +1,4 @@
+{% extends "_error.html" %}
+{% block titulo %}Sin permiso{% endblock %}
+{% block contenido %}{% with codigo_error="403" titulo_error="No tienes permiso para ver esta página" %}{{ block.super }}{% endwith %}{% endblock %}
+{% block explicacion %}<p>Tu rol no incluye esta página. Si la necesitas para tu trabajo, pídele acceso a la persona que administra la aplicación.</p>{% endblock %}

@@ -445,3 +445,53 @@ def test_consulta_no_ve_ni_busca_cedulas(client, consulta, revisor, datos):
     assert "Ana Ejemplo" not in html  # buscar por cédula no revela a quién pertenece
     html = entrar(client, revisor).get(reverse("tablero"), {"q": cedula}).content.decode()
     assert "Ana Ejemplo" in html and cedula in html
+
+
+# --- Páginas de error ---
+
+
+def _texto_de_error(respuesta):
+    html = respuesta.content.decode()
+    assert '<html lang="es"' in html
+    assert 'href="/static/css/app.css"' in html
+    assert 'href="/tablero/"' in html  # enlace para volver
+    return html
+
+
+def test_403_propio_en_espanol(client, consulta, datos):
+    respuesta = entrar(client, consulta).get(reverse("detalle", args=[datos["ana"].pk]))
+    assert respuesta.status_code == 403
+    assert "No tienes permiso" in _texto_de_error(respuesta)
+
+
+def test_404_propio_en_espanol(client, revisor, datos):
+    respuesta = entrar(client, revisor).get("/profesores/999999/")
+    assert respuesta.status_code == 404
+    html = _texto_de_error(respuesta)
+    assert "No encontramos esta página" in html
+    assert "999999" not in html  # no repite la ruta pedida
+
+
+def test_403_de_csrf_propio(revisor, datos):
+    from django.test import Client
+
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(revisor)
+    respuesta = client.post(reverse("verificar", args=[datos["ana"].pk]))
+    assert respuesta.status_code == 403
+    assert "La página caducó" in _texto_de_error(respuesta)
+
+
+def test_500_propio_sin_depender_de_la_peticion(rf):
+    from django.views.defaults import server_error
+
+    respuesta = server_error(rf.get("/"))
+    assert respuesta.status_code == 500
+    assert "Algo falló en la aplicación" in _texto_de_error(respuesta)
+
+
+def test_consulta_no_ve_enlaces_al_detalle_ni_al_pdf(client, consulta, datos):
+    html = entrar(client, consulta).get(reverse("tablero"), {"ocultos": "1"}).content.decode()
+    assert "Ana Ejemplo" in html
+    assert "/profesores/" not in html
+    assert "/pdf/" not in html
