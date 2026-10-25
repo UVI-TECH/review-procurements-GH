@@ -304,3 +304,20 @@ def test_ilegible_es_diferencia_intencional(legado):
     assert informe["motor_nuevo"]["ilegibles"] == ["eps.pdf"]
     assert "documento_ilegible" in informe["diferencias_intencionales"]
     assert informe["documentos"][-1]["coincide_tipo"]
+
+
+def test_pendiente_de_analisis_es_diferencia_intencional(legado):
+    """El legado no tiene ese estado: analizaba todo en la misma corrida (ADR 0005)."""
+    pendiente = ResultadoDocumento.pendiente_de_analisis("nuevo.pdf")
+    nuevos = [*completos(), pendiente]
+    # El legado sí lo analizó: un documento que no es requisito.
+    viejos = [*[a_dict_legado(r) for r in completos()], {"tipo_detectado": "otro"}]
+    assert a_dict_legado(pendiente)["tipo_detectado"] == "ERROR"
+    informe = comparar_profesor("P", viejos, nuevos, catalogo_inicial(), legado)
+    assert informe["legado"]["estado"] == "COMPLETO"
+    assert informe["motor_nuevo"]["estado"] == "PENDIENTE_ANALISIS"
+    assert informe["motor_nuevo"]["pendientes"] == ["nuevo.pdf"]
+    assert informe["motor_nuevo"]["errores"] == []
+    assert "pendiente_de_analisis" in informe["diferencias_intencionales"]
+    assert informe["diferencias_no_explicadas"] == []
+    assert informe["documentos"][-1]["nuevo"]["tipo"] == "pendiente"
