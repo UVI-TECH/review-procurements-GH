@@ -43,6 +43,15 @@ class TipoDocumento(models.Model):
     )
     orden = models.PositiveSmallIntegerField()
     requiere_firma = models.BooleanField(default=False)
+    vigencia_dias = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Días desde la expedición en que el documento sigue sirviendo. Vacío: no vence.",
+    )
+    requiere_logo = models.BooleanField(
+        default=False,
+        help_text="Aún sin regla (ADR 0006): se activa cuando el logo esté calibrado.",
+    )
 
     class Meta:
         ordering = ["orden", "codigo"]
@@ -70,6 +79,16 @@ class AliasTipoDocumento(models.Model):
 
     tipo = models.ForeignKey(TipoDocumento, on_delete=models.CASCADE, related_name="alias")
     codigo = models.CharField(max_length=80, unique=True, validators=[validar_codigo])
+    # Con qué documento se cumplió el requisito (p. ej. "Resolución de pensión por vejez").
+    etiqueta = models.CharField(max_length=150, blank=True, help_text="Vacío: la del tipo.")
+    hereda_vigencia = models.BooleanField(
+        default=True,
+        help_text="Si no, usa la vigencia de este alias (vacía: no vence).",
+    )
+    vigencia_dias = models.PositiveSmallIntegerField(null=True, blank=True)
+    observacion = models.CharField(
+        max_length=200, blank=True, help_text="Se muestra en el detalle de cada documento."
+    )
 
     class Meta:
         ordering = ["codigo"]
@@ -313,6 +332,13 @@ class Analisis(ModeloInmutable):
     numero_documento = models.CharField(max_length=30, blank=True)
     nombre_persona = models.CharField(max_length=200, blank=True)
     tiene_firma = models.BooleanField(null=True)
+    # Solo la extrae la IA; la vigencia la decide reglas.py (ADR 0006). Nula si no se leyó.
+    fecha_expedicion = models.DateField(null=True, blank=True)
+    # En EPS/AFP: qué afiliación certifica el documento ("eps", "afp" o "ambos").
+    cubre = models.CharField(max_length=5, blank=True)
+    # Solo se observan; aún no cambian es_valido (ADR 0006).
+    tiene_logo_oficial = models.BooleanField(null=True)
+    es_plantilla_institucional = models.BooleanField(null=True)
     datos_extra = models.JSONField(default=dict, blank=True)
     observaciones = models.TextField(blank=True)
     respuesta_cruda = models.JSONField(default=dict, blank=True)

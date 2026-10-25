@@ -23,7 +23,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from apps.contrataciones.models import Analisis, Corrida, Documento, Profesor
-from apps.contrataciones.servicios.estado import recalcular_estado
+from apps.contrataciones.servicios.estado import recalcular_estado, recalcular_todos
 from apps.cuentas.auditoria import registrar
 from apps.motor.aislamiento import InspectorAislado
 from apps.motor.catalogo import cargar_catalogo
@@ -44,6 +44,9 @@ class WorkerDetenido(Exception):
     def __init__(self, corrida_id=None):
         super().__init__(corrida_id)
         self.corrida_id = corrida_id
+
+
+RECALCULO_DIARIO_SEGUNDOS = 24 * 60 * 60
 
 
 def _no_informar(mensaje):
@@ -71,11 +74,16 @@ def ejecutar_worker(
     inspector=None,
     antes=None,
     informar=None,
+    reloj=time.monotonic,
 ):
     """Procesa corridas hasta que no quede ninguna (una_vez) o para siempre.
 
+    Al arrancar y cada RECALCULO_DIARIO_SEGUNDOS recalcula el estado de todos los
+    profesores: la vigencia cambia con los días aunque no cambien los archivos (ADR 0006).
+
     antes: se llama ya con el bloqueo tomado (el comando revisa ahí las migraciones).
     informar: recibe los mensajes de progreso para la consola.
+    reloj: segundos monótonos; las pruebas lo reemplazan.
     """
     intervalo = settings.WORKER_INTERVALO_SEGUNDOS if intervalo is None else intervalo
     crear_cliente = crear_cliente or crear_cliente_del_motor
@@ -85,9 +93,15 @@ def ejecutar_worker(
             antes()
         propio = inspector is None
         inspector = inspector or InspectorAislado(settings.MOTOR_TIMEOUT_PDF_SEGUNDOS)
-        actual, esperando = None, False
+        actual, esperando, ultimo_recalculo = None, False, None
         try:
             while True:
+                if ultimo_recalculo is None or reloj() - ultimo_recalculo >= (
+                    RECALCULO_DIARIO_SEGUNDOS
+                ):
+                    total = recalcular_todos(cargar_catalogo())
+                    informar(f"Estados recalculados por vigencia: {total} profesores.")
+                    ultimo_recalculo = reloj()
                 corrida = siguiente_corrida()
                 if corrida is None:
                     if una_vez:
@@ -286,6 +300,10 @@ def guardar_analisis(documento, corrida, sha256, resultado):
         numero_documento=resultado.numero_documento[:30],
         nombre_persona=resultado.nombre_persona[:200],
         tiene_firma=resultado.tiene_firma,
+        fecha_expedicion=resultado.fecha_expedicion,
+        cubre=resultado.cubre[:5],
+        tiene_logo_oficial=resultado.tiene_logo_oficial,
+        es_plantilla_institucional=resultado.es_plantilla_institucional,
         datos_extra=resultado.datos_extra,
         observaciones=observaciones,
         respuesta_cruda=resultado.respuesta_cruda,

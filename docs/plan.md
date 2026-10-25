@@ -116,7 +116,7 @@ Ocho pantallas. El progreso de las corridas se actualiza en vivo con HTMX, consu
 | Pantalla | Rol | Qué hace |
 | --- | --- | --- |
 | Inicio de sesión | Todos | Usuario y contraseña |
-| Tablero | Revisor, Consulta | Totales por estado; tabla de profesores con semáforo en los 9 tipos; filtros por estado, tipo faltante y verificación; búsqueda por nombre o cédula |
+| Tablero | Revisor, Consulta | Totales por estado; tabla de profesores con semáforo en los tipos activos del catálogo (10 desde el ADR 0006); filtros por estado, tipo faltante y verificación; búsqueda por nombre o cédula |
 | Detalle del profesor | Revisor | Documentos con el resultado de la IA y el PDF al lado; aprobar, rechazar o corregir el tipo con comentario; marcar al profesor como verificado; historial |
 | Corridas | Revisor, Administrador | Lanzar (todos, solo nuevos o modificados, un profesor); progreso en vivo; cancelar; historial con totales, errores y tokens |
 | Informes | Revisor, Consulta | Excel consolidado con el formato actual y Excel de faltantes por profesor; más adelante, informe individual en PDF |

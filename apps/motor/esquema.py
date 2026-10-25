@@ -4,6 +4,9 @@ La API ya hace cumplir el esquema con strict: true, pero la entrada se valida de
 aquí: una respuesta fuera del esquema es un resultado con ERROR, nunca una excepción.
 """
 
+import re
+from datetime import date
+
 from .reglas import norm
 from .resultado import ResultadoDocumento
 
@@ -14,6 +17,8 @@ _TEXTO = {"type": "string"}
 _BOOLEANO = {"type": "boolean"}
 _TEXTO_O_NULO = {"anyOf": [{"type": "string"}, {"type": "null"}]}
 _BOOLEANO_O_NULO = {"anyOf": [{"type": "boolean"}, {"type": "null"}]}
+COBERTURAS = ("eps", "afp", "ambos")
+_COBERTURA = {"anyOf": [{"type": "string", "enum": list(COBERTURAS)}, {"type": "null"}]}
 
 # Campo -> (esquema, tipos de Python aceptados al validar). El enum de tipo_detectado
 # sale del catálogo.
@@ -23,12 +28,22 @@ _CAMPOS = {
     "numero_documento": (_TEXTO, (str,)),
     "nombre_persona": (_TEXTO, (str,)),
     "tiene_firma": (_BOOLEANO_O_NULO, (bool, type(None))),
-    "fecha_emision_eps": (_TEXTO_O_NULO, (str, type(None))),
-    "fecha_emision_afp": (_TEXTO_O_NULO, (str, type(None))),
-    "es_certificado_afiliacion": (_BOOLEANO_O_NULO, (bool, type(None))),
+    "fecha_expedicion": (_TEXTO_O_NULO, (str, type(None))),
+    "cubre": (_COBERTURA, (str, type(None))),
+    "tiene_logo_oficial": (_BOOLEANO_O_NULO, (bool, type(None))),
+    "es_plantilla_institucional": (_BOOLEANO_O_NULO, (bool, type(None))),
     "observaciones": (_TEXTO, (str,)),
 }
-_DATOS_EXTRA = ("fecha_emision_eps", "fecha_emision_afp", "es_certificado_afiliacion")
+
+
+def leer_fecha(texto):
+    """AAAA-MM-DD -> date. Cualquier otra cosa es una fecha que no se pudo leer (None)."""
+    if not isinstance(texto, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", texto.strip()):
+        return None
+    try:
+        return date.fromisoformat(texto.strip())
+    except ValueError:
+        return None
 
 
 def codigos_permitidos(catalogo):
@@ -68,6 +83,8 @@ def _problema(entrada, catalogo):
             return f"tipo incorrecto en {campo}"
     if entrada["tipo_detectado"] not in codigos_permitidos(catalogo):
         return "tipo_detectado fuera del catálogo"
+    if entrada["cubre"] is not None and entrada["cubre"] not in COBERTURAS:
+        return "cubre fuera de eps, afp o ambos"
     return None
 
 
@@ -88,7 +105,12 @@ def interpretar_entrada(entrada, catalogo, *, nombre_archivo, **metadatos):
         numero_documento=entrada["numero_documento"],
         nombre_persona=entrada["nombre_persona"],
         tiene_firma=entrada["tiene_firma"],
-        datos_extra={campo: entrada[campo] for campo in _DATOS_EXTRA},
+        # Una fecha que no es AAAA-MM-DD válida queda como no leída; el texto queda en
+        # respuesta_cruda.
+        fecha_expedicion=leer_fecha(entrada["fecha_expedicion"]),
+        cubre=entrada["cubre"] or "",
+        tiene_logo_oficial=entrada["tiene_logo_oficial"],
+        es_plantilla_institucional=entrada["es_plantilla_institucional"],
         observaciones=entrada["observaciones"],
         respuesta_cruda=dict(entrada),
         **metadatos,

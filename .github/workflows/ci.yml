@@ -12,10 +12,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Imágenes fijas (no *-latest): un cambio de imagen de GitHub no rompe CI antes del lote
+# de diciembre de 2026. Revisarlas después de diciembre (ver CLAUDE.md).
 jobs:
   gitleaks:
     name: Secretos (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -38,7 +40,7 @@ jobs:
 
   ruff:
     name: Ruff
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -56,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && '["ubuntu-24.04", "windows-2025-vs2026"]' || '["ubuntu-24.04"]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -83,7 +85,7 @@ jobs:
     name: Navegador (Chromium)
     # Playwright con Chromium real: login, tablero, detalle con el PDF y una revisión.
     # Falla ante cualquier violación de CSP o recurso que no carga (tests/navegador/).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
 

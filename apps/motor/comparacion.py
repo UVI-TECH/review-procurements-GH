@@ -16,9 +16,31 @@ from django.core.management import CommandError
 
 from config.entorno import BASE_DIR
 
-from .reglas import EstadoProfesor, evaluar_profesor, norm, revalidar_por_cedula
+from .reglas import (
+    AFP,
+    EPS,
+    EstadoProfesor,
+    aplicar_vigencia,
+    evaluar_profesor,
+    norm,
+    revalidar_por_cedula,
+)
 
 RUTA_LEGADO = BASE_DIR / "legado" / "revisar_contrataciones.py"
+
+# El legado tiene un solo tipo de seguridad social; el motor separa EPS y AFP, y acepta
+# alternativas de pensión como alias de AFP (ADR 0006).
+TIPO_LEGADO_SEGURIDAD_SOCIAL = "certificados_eps_afp"
+CODIGOS_SEGURIDAD_SOCIAL = frozenset(
+    {"certificado_eps", "certificado_afp", "resolucion_pension_vejez", "carta_bono_pensional"}
+)
+
+
+ALTERNATIVAS_DE_PENSION = CODIGOS_SEGURIDAD_SOCIAL - {EPS, AFP}
+
+
+def codigo_para_el_legado(codigo):
+    return TIPO_LEGADO_SEGURIDAD_SOCIAL if norm(codigo) in CODIGOS_SEGURIDAD_SOCIAL else codigo
 
 
 def cargar_legado():
@@ -59,7 +81,7 @@ def a_dict_legado(resultado):
             "observaciones": resultado.error or resultado.observaciones,
         }
     return {
-        "tipo_detectado": resultado.tipo_detectado,
+        "tipo_detectado": codigo_para_el_legado(resultado.tipo_detectado),
         "es_valido": resultado.es_valido,
         "numero_documento": resultado.numero_documento,
         "nombre_persona": resultado.nombre_persona,
@@ -89,8 +111,19 @@ def _reglas_del_legado(legado, profesor, dicts):
 def _tipo(catalogo, codigo):
     if norm(codigo) == "error":
         return "error"
+    if norm(codigo) == TIPO_LEGADO_SEGURIDAD_SOCIAL:  # inactivo en el motor nuevo
+        return TIPO_LEGADO_SEGURIDAD_SOCIAL
     tipo = catalogo.resolver(codigo)
     return tipo.codigo if tipo else "otro"
+
+
+def _mismo_tipo(viejo, nuevo):
+    if viejo == nuevo:
+        return True
+    # Un ilegible es el mismo archivo que en el legado falló en la API.
+    if viejo == "error" and nuevo == "ilegible":
+        return True
+    return viejo == TIPO_LEGADO_SEGURIDAD_SOCIAL and nuevo in CODIGOS_SEGURIDAD_SOCIAL
 
 
 def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
@@ -114,6 +147,16 @@ def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
     # Estado nuevo: el legado no deja documentos sin analizar (ADR 0005).
     if evaluacion.pendientes:
         motivos.append("pendiente_de_analisis")
+    # Requisitos de Gestión Humana 2026-2 (ADR 0006): el legado tenía un solo tipo de
+    # seguridad social, no evaluaba la vigencia y no conocía las alternativas de pensión.
+    # Falta solo uno de los dos: el otro está, y al legado le bastaba con ese documento.
+    if len({t.codigo for t in evaluacion.faltantes} & {EPS, AFP}) == 1:
+        motivos.append("separacion_eps_afp")
+    if any(d.vencido or d.fecha_sin_leer for d in documentos):
+        motivos.append("vigencia")
+    vigente_afp = evaluacion.vigentes.get(AFP)
+    if vigente_afp is not None and norm(vigente_afp.tipo_detectado) in ALTERNATIVAS_DE_PENSION:
+        motivos.append("alternativa_pension")
     # Estados nuevos donde el legado solo decía INCOMPLETO (ADR 0003, diferencia 4).
     if estado_legado == "INCOMPLETO":
         if evaluacion.estado == EstadoProfesor.SIN_DOCUMENTOS:
@@ -123,11 +166,15 @@ def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
     return motivos
 
 
-def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legado):
-    """Compara un profesor; dicts_legado y resultados_nuevos van en el mismo orden de PDFs."""
+def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legado, *, hoy=None):
+    """Compara un profesor; dicts_legado y resultados_nuevos van en el mismo orden de PDFs.
+
+    hoy: fecha de referencia de la vigencia (None: no se evalúa). La muestra real es de
+    junio y julio de 2026, así que el comando permite fijarla (--fecha-referencia).
+    """
     viejos, col1 = _reglas_del_legado(legado, profesor, dicts_legado)
     _, col2 = _reglas_del_legado(legado, profesor, [a_dict_legado(r) for r in resultados_nuevos])
-    revalidados = revalidar_por_cedula(resultados_nuevos, catalogo)
+    revalidados = aplicar_vigencia(revalidar_por_cedula(resultados_nuevos, catalogo), catalogo, hoy)
     evaluacion = evaluar_profesor(revalidados, catalogo)
     col3 = {
         "estado": str(evaluacion.estado),
@@ -138,6 +185,8 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         "errores": [r.error for r in evaluacion.errores],
         "ilegibles": [r.nombre_archivo for r in evaluacion.ilegibles],
         "pendientes": [r.nombre_archivo for r in evaluacion.pendientes],
+        "vencidos": [r.nombre_archivo for r in revalidados if r.vencido],
+        "fechas_sin_leer": [r.nombre_archivo for r in evaluacion.fechas_sin_leer],
     }
 
     completo = EstadoProfesor.COMPLETO
@@ -154,9 +203,11 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         col3["faltantes"],
         col3["problemas"],
     )
+    # También cuando la diferencia viene de la IA: el prompt nuevo reconoce documentos que
+    # el legado no conocía (p. ej. las alternativas de pensión, ADR 0006).
     motivos = (
         _motivos_intencionales(evaluacion, revalidados, catalogo, col2["estado"])
-        if difieren_reglas
+        if difieren_reglas or col1["estado"] != col3["estado"]
         else []
     )
 
@@ -175,10 +226,14 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
             {
                 "archivo": nuevo.nombre_archivo,
                 "legado": {"tipo": tipo_viejo, "es_valido": bool(viejo.get("es_valido"))},
-                "nuevo": {"tipo": tipo_nuevo, "es_valido": nuevo.es_valido},
-                # Un ilegible es el mismo archivo que en el legado falló en la API.
-                "coincide_tipo": tipo_viejo == tipo_nuevo
-                or (tipo_viejo == "error" and tipo_nuevo == "ilegible"),
+                "nuevo": {
+                    "tipo": tipo_nuevo,
+                    "es_valido": nuevo.es_valido,
+                    "fecha_expedicion": nuevo.fecha_expedicion,
+                    "vencido": nuevo.vencido,
+                    "tiene_logo_oficial": nuevo.tiene_logo_oficial,
+                },
+                "coincide_tipo": _mismo_tipo(tipo_viejo, tipo_nuevo),
                 "coincide_es_valido": bool(viejo.get("es_valido")) == nuevo.es_valido,
             }
         )
@@ -196,6 +251,20 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         "diferencias_no_explicadas": (["reglas"] if difieren_reglas and not motivos else []),
         "documentos": documentos,
     }
+
+
+def logo_por_tipo(documentos):
+    """{tipo: {"verdadero", "falso", "nulo"}} de tiene_logo_oficial, para calibrar la
+    regla del logo (ADR 0006). Sin errores, ilegibles ni pendientes: no tienen análisis."""
+    conteo = {}
+    for d in documentos:
+        tipo = d["nuevo"]["tipo"]
+        if tipo in ("error", "ilegible", "pendiente"):
+            continue
+        valor = {True: "verdadero", False: "falso"}.get(d["nuevo"].get("tiene_logo_oficial"))
+        fila = conteo.setdefault(tipo, {"verdadero": 0, "falso": 0, "nulo": 0})
+        fila[valor or "nulo"] += 1
+    return dict(sorted(conteo.items()))
 
 
 def resumir(informes):
@@ -218,6 +287,7 @@ def resumir(informes):
             bool(i["diferencias_no_explicadas"]) for i in informes
         ),
         "documentos": len(documentos),
+        "logo_por_tipo": logo_por_tipo(documentos),
         "documentos_tipo_coincide": sum(d["coincide_tipo"] for d in documentos),
         "documentos_es_valido_coincide": sum(d["coincide_es_valido"] for d in documentos),
     }

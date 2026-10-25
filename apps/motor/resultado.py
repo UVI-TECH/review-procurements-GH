@@ -1,7 +1,7 @@
 """Estructuras de datos del motor. No dependen del ORM."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 
 # tipo_detectado de un archivo que no se pudo analizar por un problema del propio archivo
 # (contraseña, dañado, demasiado grande). No es un código del catálogo ni de la IA.
@@ -34,6 +34,17 @@ class ResultadoDocumento:
     numero_documento: str = ""
     nombre_persona: str = ""
     tiene_firma: bool | None = None
+    # La IA solo extrae la fecha; la vigencia la decide reglas.py (ADR 0006).
+    fecha_expedicion: date | None = None
+    cubre: str = ""  # en EPS/AFP: "eps", "afp" o "ambos"
+    # Solo se observan; aún no cambian es_valido (ADR 0006).
+    tiene_logo_oficial: bool | None = None
+    es_plantilla_institucional: bool | None = None
+    # Los pone reglas.aplicar_vigencia contra una fecha de referencia (ADR 0006).
+    vencido: bool = False
+    fecha_sin_leer: bool = False  # el tipo vence, pero no hay fecha confiable
+    vence_el: date | None = None
+    por_vencer: bool = False  # vence en 7 días o menos
     datos_extra: dict = field(default_factory=dict)
     observaciones: str = ""
     error: str = ""

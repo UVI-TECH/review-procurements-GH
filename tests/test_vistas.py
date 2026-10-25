@@ -48,7 +48,7 @@ def datos(raiz, corrida):
     ana = Profesor.objects.create(carpeta="DEMO ANA", nombre="Ana Ejemplo", cedula="")
     completo(ana, corrida)
     beto = Profesor.objects.create(carpeta="DEMO BETO", nombre="Beto Prueba")
-    completo(beto, corrida, certificados_eps_afp=None)
+    completo(beto, corrida, certificado_afp=None)
     documento(beto, corrida, Analisis.TIPO_ILEGIBLE, valido=False, cedula="", nombre="roto.pdf")
     ido = Profesor.objects.create(carpeta="DEMO IDO", nombre="Ido Ausente", carpeta_presente=False)
     for profesor in (ana, beto, ido):
@@ -139,7 +139,7 @@ def test_revisor_ve_el_detalle(client, revisor, datos):
 
 
 def test_tablero_totales_columnas_del_catalogo_y_ocultos(client, revisor, datos):
-    TipoDocumento.objects.filter(codigo="certificados_eps_afp").update(activo=False)
+    TipoDocumento.objects.filter(codigo="certificado_afp").update(activo=False)
     html = entrar(client, revisor).get(reverse("tablero")).content.decode()
     assert "Ana Ejemplo" in html and "Beto Prueba" in html
     assert "Ido Ausente" not in html  # carpeta no presente: oculto por defecto
@@ -153,7 +153,7 @@ def test_tablero_totales_columnas_del_catalogo_y_ocultos(client, revisor, datos)
     ("filtros", "aparece", "no_aparece"),
     [
         ({"estado": "COMPLETO"}, "Ana Ejemplo", "Beto Prueba"),
-        ({"falta": "certificados_eps_afp"}, "Beto Prueba", "Ana Ejemplo"),
+        ({"falta": "certificado_afp"}, "Beto Prueba", "Ana Ejemplo"),
         ({"atencion": "1"}, "Beto Prueba", "Ana Ejemplo"),
         ({"q": "beto"}, "Beto Prueba", "Ana Ejemplo"),
         ({"q": "1000000001"}, "Ana Ejemplo", "Ido Ausente"),
@@ -218,7 +218,7 @@ def test_revision_invalida_muestra_el_error_y_no_guarda(client, revisor, datos):
 def test_corregir_el_tipo(client, revisor, datos):
     beto = datos["beto"]
     roto = beto.documentos.get(nombre_archivo="roto.pdf")
-    eps = TipoDocumento.objects.get(codigo="certificados_eps_afp")
+    eps = TipoDocumento.objects.get(codigo="certificado_afp")
     entrar(client, revisor).post(
         reverse("revisar", args=[beto.pk, roto.pk]),
         {"decision": "corregido", "comentario": "Es la EPS", "tipo_corregido": eps.pk},
@@ -674,3 +674,76 @@ def test_verificacion_sin_verificar_no_se_confunde_con_pendiente_de_analisis(
     assert ">Pendiente<" not in html
     html = client.get(reverse("detalle", args=[datos["beto"].pk])).content.decode()
     assert '<span class="insignia verificacion-pendiente">Sin verificar</span>' in html
+
+
+# --- Requisitos 2026-2 en el detalle (ADR 0006) ---
+
+
+@pytest.fixture
+def ciro(corrida):
+    return Profesor.objects.create(carpeta="DEMO CIRO", nombre="Ciro Requisitos")
+
+
+def _detalle(client, revisor, profesor, documento=None):
+    recalcular_estado(profesor, cargar_catalogo())
+    datos = {"documento": documento.pk} if documento else {}
+    return entrar(client, revisor).get(reverse("detalle", args=[profesor.pk]), datos)
+
+
+def _enlace(html, documento):
+    inicio = html.index(f'id="doc-{documento.pk}"')
+    return html[inicio : html.index("</a>", inicio)]
+
+
+def test_detalle_de_un_vencido(client, revisor, ciro, corrida):
+    docs = completo(ciro, corrida, certificado_eps={"dias": 45})
+    html = _detalle(client, revisor, ciro, docs["certificado_eps"]).content.decode()
+    assert "✗ Vencido" in _enlace(html, docs["certificado_eps"])
+    assert "Certificado vencido: venció el" in html
+    assert "solicitar uno nuevo" in html  # observación accionable
+    assert 'id="aviso-vencido"' in html and 'aria-describedby="aviso-vencido"' in html
+
+
+def test_detalle_de_uno_por_vencer(client, revisor, ciro, corrida):
+    docs = completo(ciro, corrida, certificado_afp={"dias": 25})
+    html = _detalle(client, revisor, ciro, docs["certificado_afp"]).content.decode()
+    assert "<strong>Por vencer:</strong> Certificado de fondo de pensiones (AFP) (vence el" in html
+    assert "Vence el" in _enlace(html, docs["certificado_afp"])
+    assert "pide uno nuevo antes de esa fecha" in html
+
+
+def test_detalle_con_fecha_sin_leer(client, revisor, ciro, corrida):
+    docs = completo(ciro, corrida, certificado_eps={"dias": None})
+    html = _detalle(client, revisor, ciro, docs["certificado_eps"]).content.decode()
+    assert "Fecha sin leer" in _enlace(html, docs["certificado_eps"])
+    assert "<dt>Fecha de expedición</dt><dd>No se pudo leer</dd>" in html
+
+
+def test_detalle_de_un_combinado_eps_y_pension(client, revisor, ciro, corrida):
+    completo(ciro, corrida, certificado_eps=None, certificado_afp=None)
+    combinado = documento(ciro, corrida, "certificado_eps", nombre="seguridad.pdf", cubre="ambos")
+    respuesta = _detalle(client, revisor, ciro, combinado)
+    ciro.refresh_from_db()
+    assert ciro.estado == "COMPLETO"
+    assert "<dt>Cubre</dt><dd>EPS y pensión</dd>" in respuesta.content.decode()
+
+
+def test_detalle_de_la_carta_de_bono_pensional(client, revisor, ciro, corrida):
+    completo(ciro, corrida, certificado_afp=None)
+    bono = documento(ciro, corrida, "carta_bono_pensional", nombre="bono.pdf")
+    html = _detalle(client, revisor, ciro, bono).content.decode()
+    enlace = _enlace(html, bono)
+    assert "Carta de bono pensional" in enlace and "Declaración del profesor" in enlace
+    assert (
+        '<p class="aviso">Carta de bono pensional: declaración del profesor, no certificado '
+        "de una entidad</p>"
+    ) in html
+    ciro.refresh_from_db()
+    assert ciro.estado == "COMPLETO"
+
+
+def test_detalle_muestra_el_logo_solo_como_observacion(client, revisor, ciro, corrida):
+    docs = completo(ciro, corrida)
+    html = _detalle(client, revisor, ciro, docs["certificado_eps"]).content.decode()
+    assert "<dt>Logo de la entidad</dt><dd>No se sabe" in html
+    assert "solo se observa; no cambia la validez" in html

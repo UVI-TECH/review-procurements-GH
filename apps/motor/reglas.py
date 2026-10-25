@@ -8,9 +8,15 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from enum import StrEnum
 
 OBS_CEDULA_AMBIGUA = "Cédula ambigua: requiere revisión humana. "
+
+# Un PDF de EPS o de pensión con cubre="ambos" cumple los dos requisitos (ADR 0006).
+EPS = "certificado_eps"
+AFP = "certificado_afp"
+DIAS_AVISO_POR_VENCER = 7
 
 
 class EstadoProfesor(StrEnum):
@@ -118,6 +124,83 @@ def _revalidar(r, modal, catalogo):
     )
 
 
+def _fecha(d):
+    return d.strftime("%d/%m/%Y")
+
+
+def aplicar_vigencia(resultados, catalogo, hoy):
+    """Marca vencidos, por vencer y fechas sin leer contra hoy (una date; None: no evalúa).
+
+    Se aplica después de revalidar_por_cedula: si no, la cédula que coincide rescataría a
+    un vencido. Un vencido queda inválido con una observación que dice qué pedir. Una
+    fecha que falta o es posterior a hoy no invalida: queda señalada para revisión humana.
+    Lo que validó un revisor no se toca: la decisión humana prevalece.
+    """
+    if hoy is None:
+        return list(resultados)
+    salida = []
+    for r in resultados:
+        dias_maximos = catalogo.vigencia_de(r.tipo_detectado)
+        if (
+            dias_maximos is None
+            or r.es_error
+            or r.es_ilegible
+            or r.es_pendiente
+            or r.validado_por_revisor
+            or r.vencido
+            or r.fecha_sin_leer
+        ):
+            salida.append(r)
+            continue
+        fecha = r.fecha_expedicion
+        if fecha is None or fecha > hoy:
+            motivo = "no se pudo leer" if fecha is None else "es posterior a hoy"
+            salida.append(
+                replace(
+                    r,
+                    fecha_sin_leer=True,
+                    observaciones=f"La fecha de expedición {motivo}: revisar a mano la "
+                    f"vigencia (máximo {dias_maximos} días). " + r.observaciones,
+                )
+            )
+            continue
+        dias = (hoy - fecha).days
+        vence_el = fecha + timedelta(days=dias_maximos)
+        if dias > dias_maximos:
+            salida.append(
+                replace(
+                    r,
+                    es_valido=False,
+                    vencido=True,
+                    vence_el=vence_el,
+                    observaciones=f"Certificado expedido el {_fecha(fecha)} ({dias} días; "
+                    f"máximo {dias_maximos}): solicitar uno nuevo. " + r.observaciones,
+                )
+            )
+            continue
+        salida.append(
+            replace(
+                r,
+                vence_el=vence_el,
+                por_vencer=(vence_el - hoy).days <= DIAS_AVISO_POR_VENCER,
+            )
+        )
+    return salida
+
+
+def _tipos_que_cumple(r, catalogo):
+    """El tipo del documento y, si es EPS o pensión con cubre="ambos", también el otro."""
+    tipo = catalogo.resolver(r.tipo_detectado)
+    if tipo is None:
+        return []
+    tipos = [tipo]
+    if r.cubre == "ambos" and tipo.codigo in (EPS, AFP):
+        otro = catalogo.resolver(AFP if tipo.codigo == EPS else EPS)
+        if otro is not None:
+            tipos.append(otro)
+    return tipos
+
+
 @dataclass(frozen=True)
 class EvaluacionProfesor:
     estado: EstadoProfesor
@@ -130,6 +213,8 @@ class EvaluacionProfesor:
     cedula: str | None
     cedula_ambigua: bool
     pendientes: tuple = ()  # ResultadoDocumento aún sin analizar (ADR 0005)
+    fechas_sin_leer: tuple = ()  # vencen, pero la fecha no se leyó: revisión humana
+    por_vencer: tuple = ()  # vigentes que vencen en 7 días o menos
 
 
 def _clave_vigente(r):
@@ -159,10 +244,10 @@ def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=
     por_tipo = {}
     no_reconocidos = []
     for r in analizados:
-        tipo = catalogo.resolver(r.tipo_detectado)
-        if tipo is None:
+        tipos = _tipos_que_cumple(r, catalogo)
+        if not tipos:
             no_reconocidos.append(r)
-        else:
+        for tipo in tipos:
             por_tipo.setdefault(tipo.codigo, []).append(r)
     vigentes = {codigo: max(docs, key=_clave_vigente) for codigo, docs in por_tipo.items()}
 
@@ -201,4 +286,9 @@ def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=
         cedula=cedula_confirmada or (None if ambigua else cedula_modal(evidencia)),
         cedula_ambigua=ambigua,
         pendientes=pendientes,
+        fechas_sin_leer=tuple(r for r in analizados if r.fecha_sin_leer),
+        # Un combinado es el vigente de EPS y de AFP: cuenta una vez.
+        por_vencer=tuple(
+            {id(r): r for r in vigentes.values() if r.por_vencer and r.es_valido}.values()
+        ),
     )

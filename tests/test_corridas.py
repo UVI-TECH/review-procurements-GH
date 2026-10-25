@@ -40,6 +40,10 @@ class ClienteContador(ClienteSimulado):
         return super().analizar_datos(datos, nombre_archivo, profesor, modificado_en=modificado_en)
 
 
+# PROFESOR UNO: un PDF por tipo; PROFESOR DOS: tres.
+TOTAL = len(CODIGOS) + 3
+
+
 @pytest.fixture(autouse=True)
 def limpiar_contador():
     ClienteContador.llamadas = []
@@ -74,7 +78,7 @@ class ClienteRecuperado(ClienteContador):
 
     def analizar_datos(self, datos, nombre_archivo, profesor, *, modificado_en=None):
         ClienteContador.llamadas.append(nombre_archivo)
-        nombre = "certificados_eps_afp.pdf" if nombre_archivo == "error_api.pdf" else nombre_archivo
+        nombre = "certificado_afp.pdf" if nombre_archivo == "error_api.pdf" else nombre_archivo
         resultado = ClienteSimulado.analizar_datos(
             self, datos, nombre, profesor, modificado_en=modificado_en
         )
@@ -105,9 +109,9 @@ def corrida_completa(
 def test_primera_corrida_analiza_todo_y_calcula_estados(raiz, revisor):
     corrida = corrida_completa(raiz, revisor)
     assert corrida.estado == Corrida.Estado.COMPLETADA
-    assert len(ClienteContador.llamadas) == 12
-    assert (corrida.total_documentos, corrida.documentos_procesados) == (12, 12)
-    assert corrida.analisis.count() == 12
+    assert len(ClienteContador.llamadas) == TOTAL
+    assert (corrida.total_documentos, corrida.documentos_procesados) == (TOTAL, TOTAL)
+    assert corrida.analisis.count() == TOTAL
     uno = Profesor.objects.get(carpeta="PROFESOR UNO")
     assert uno.estado == EstadoProfesor.COMPLETO
     assert uno.cedula == "1000000001"
@@ -145,7 +149,7 @@ def test_pdf_borrado_queda_no_presente_y_no_se_analiza(raiz, revisor):
     documento = Documento.objects.get(ruta_relativa=borrado)
     assert not documento.presente
     assert documento.analisis.count() == 1  # su historial se conserva
-    assert len(ClienteContador.llamadas) == 11
+    assert len(ClienteContador.llamadas) == TOTAL - 1
     assert Profesor.objects.get(carpeta="PROFESOR UNO").estado == EstadoProfesor.INCOMPLETO
 
 
@@ -169,11 +173,11 @@ def test_caida_a_mitad_y_reanudacion_sin_duplicar_trabajo(raiz, revisor):
     trabajar(raiz)
     corrida.refresh_from_db()
     assert corrida.estado == Corrida.Estado.COMPLETADA
-    assert len(ClienteContador.llamadas) == 7
-    assert corrida.analisis.count() == 12
+    assert len(ClienteContador.llamadas) == TOTAL - 5
+    assert corrida.analisis.count() == TOTAL
     for documento in Documento.objects.all():
         assert documento.analisis.filter(corrida=corrida).count() == 1
-    assert corrida.documentos_procesados == 12
+    assert corrida.documentos_procesados == TOTAL
     assert RegistroAuditoria.objects.filter(accion="corrida_reanudada").count() == 1
 
 
@@ -215,7 +219,7 @@ def test_tiempo_limite_por_documento(raiz, revisor, settings):
         trabajar(raiz, inspector=inspector)
     corrida.refresh_from_db()
     assert corrida.estado == Corrida.Estado.COMPLETADA
-    assert corrida.documentos_procesados == 13
+    assert corrida.documentos_procesados == TOTAL + 1
     assert corrida.documentos_con_error == 1
     colgado = Analisis.objects.get(documento__nombre_archivo="colgado.pdf")
     assert colgado.tipo_detectado == Analisis.TIPO_ERROR
@@ -265,7 +269,7 @@ def test_un_error_no_tapa_un_resultado_util(raiz, revisor):
     corrida = corrida_completa(
         raiz, revisor, alcance=Corrida.Alcance.TODOS, cliente=ClienteQueFalla
     )
-    assert corrida.documentos_con_error == 12
+    assert corrida.documentos_con_error == TOTAL
     assert Profesor.objects.get(carpeta="PROFESOR UNO").estado == EstadoProfesor.COMPLETO
     assert Profesor.objects.get(carpeta="PROFESOR DOS").estado == EstadoProfesor.INCOMPLETO
 
@@ -301,7 +305,7 @@ def test_carpeta_desaparecida_se_salta(raiz, revisor, tmp_path):
     (raiz / "PROFESOR DOS").rename(tmp_path / "fuera")
     ClienteContador.llamadas = []
     corrida_completa(raiz, revisor, alcance=Corrida.Alcance.TODOS)
-    assert len(ClienteContador.llamadas) == 12  # 9 + 3, sin los de PROFESOR DOS
+    assert len(ClienteContador.llamadas) == len(CODIGOS) + 3  # sin los de PROFESOR DOS
 
 
 def test_freno_del_escaneo_hace_fallar_la_corrida(raiz, revisor, tmp_path):
@@ -329,7 +333,7 @@ def test_auditoria_de_creacion_y_finalizacion_con_usuario_nulo_del_sistema(raiz,
     assert creada.usuario == revisor
     completada = RegistroAuditoria.objects.get(accion="corrida_completada")
     assert completada.usuario is None
-    assert completada.detalle["documentos_procesados"] == 12
+    assert completada.detalle["documentos_procesados"] == TOTAL
 
 
 # --- Comandos ---
@@ -341,7 +345,7 @@ def test_en_seco_no_crea_nada(raiz, revisor, capsys):
     despues = [m.objects.count() for m in (Corrida, Profesor, Documento, RegistroAuditoria)]
     assert antes == despues
     salida = capsys.readouterr().out
-    assert "Documentos a analizar: 12" in salida
+    assert f"Documentos a analizar: {TOTAL}" in salida
     assert "US$" in salida
 
 
@@ -404,14 +408,15 @@ def test_consola_muestra_corrida_progreso_y_resumen_sin_nombres(raiz, revisor):
     corrida = crear_corrida(Corrida.Alcance.NUEVOS_Y_MODIFICADOS, revisor)
     mensajes = []
     trabajar(raiz, informar=mensajes.append)
-    assert mensajes[0] == f"Corrida {corrida.pk} (nuevos_y_modificados): escaneando la carpeta…"
-    assert mensajes[1] == f"Corrida {corrida.pk}: 12 documentos por analizar."
+    assert mensajes[0] == "Estados recalculados por vigencia: 0 profesores."
+    assert mensajes[1] == f"Corrida {corrida.pk} (nuevos_y_modificados): escaneando la carpeta…"
+    assert mensajes[2] == f"Corrida {corrida.pk}: {TOTAL} documentos por analizar."
     progreso = [m for m in mensajes if " · " in m]
-    assert len(progreso) == 12
-    assert progreso[0].startswith(f"Corrida {corrida.pk} · 1/12 · errores: 0 · tokens:")
-    assert progreso[-1].startswith(f"Corrida {corrida.pk} · 12/12 · errores: 0")
+    assert len(progreso) == TOTAL
+    assert progreso[0].startswith(f"Corrida {corrida.pk} · 1/{TOTAL} · errores: 0 · tokens:")
+    assert progreso[-1].startswith(f"Corrida {corrida.pk} · {TOTAL}/{TOTAL} · errores: 0")
     assert mensajes[-2].startswith(
-        f"Corrida {corrida.pk} completada: 12/12 documentos, 0 con error"
+        f"Corrida {corrida.pk} completada: {TOTAL}/{TOTAL} documentos, 0 con error"
     )
     assert mensajes[-1] == "Sin corridas pendientes."
     texto = "\n".join(mensajes)
@@ -431,9 +436,12 @@ def test_consola_avisa_la_reanudacion(raiz, revisor):
     ClienteContador.antes_de_analizar = None
     mensajes = []
     trabajar(raiz, informar=mensajes.append)
-    assert mensajes[0] == f"Corrida {corrida.pk} (todos) reanudada: escaneando la carpeta…"
-    assert mensajes[1] == f"Corrida {corrida.pk} reanudada: 7 de 12 documentos por analizar."
-    assert any(m.startswith(f"Corrida {corrida.pk} · 12/12") for m in mensajes)
+    assert mensajes[0] == "Estados recalculados por vigencia: 2 profesores."
+    assert mensajes[1] == f"Corrida {corrida.pk} (todos) reanudada: escaneando la carpeta…"
+    assert mensajes[2] == (
+        f"Corrida {corrida.pk} reanudada: {TOTAL - 5} de {TOTAL} documentos por analizar."
+    )
+    assert any(m.startswith(f"Corrida {corrida.pk} · {TOTAL}/{TOTAL}") for m in mensajes)
 
 
 def test_mensaje_de_espera_una_sola_vez(raiz):
@@ -447,7 +455,10 @@ def test_mensaje_de_espera_una_sola_vez(raiz):
     with pytest.raises(WorkerDetenido) as detenido:
         ejecutar_worker(fuente=FuenteCarpetaLocal(raiz), intervalo=0, informar=informar)
     assert detenido.value.corrida_id is None
-    assert mensajes == ["Sin corridas pendientes; esperando…"]
+    assert mensajes == [
+        "Estados recalculados por vigencia: 0 profesores.",
+        "Sin corridas pendientes; esperando…",
+    ]
 
 
 def test_ctrl_c_a_mitad_deja_la_corrida_reanudable_y_cierra_el_pool(raiz, revisor):
@@ -472,7 +483,7 @@ def test_ctrl_c_a_mitad_deja_la_corrida_reanudable_y_cierra_el_pool(raiz, reviso
     trabajar(raiz)
     corrida.refresh_from_db()
     assert corrida.estado == Corrida.Estado.COMPLETADA
-    assert corrida.analisis.count() == 12
+    assert corrida.analisis.count() == TOTAL
 
 
 @pytest.mark.parametrize(
@@ -511,3 +522,38 @@ def test_archivo_nuevo_queda_pendiente_desde_el_escaneo(raiz, revisor):
     trabajar(raiz)
     uno.refresh_from_db()
     assert uno.estado == EstadoProfesor.COMPLETO  # el simulado lo da por "otro"
+
+
+def test_el_analisis_guarda_fecha_cobertura_y_logo(raiz, revisor):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    crear_corrida(Corrida.Alcance.TODOS, revisor)
+    trabajar(raiz)
+    afp = Analisis.objects.get(documento__ruta_relativa="PROFESOR UNO/certificado_afp.pdf")
+    assert afp.fecha_expedicion == timezone.localdate() - timedelta(days=3)
+    assert afp.cubre == "afp"
+    assert afp.tiene_logo_oficial is True
+    assert afp.es_plantilla_institucional is None
+    formato = Analisis.objects.get(
+        documento__ruta_relativa="PROFESOR UNO/formato_autorizacion_consulta_inhabilidades.pdf"
+    )
+    assert formato.es_plantilla_institucional is True
+
+
+def _reloj(*valores):
+    iterador = iter(valores)
+    return lambda: next(iterador)
+
+
+@pytest.mark.parametrize(("segundos", "recalculos"), [(24 * 3600, 2), (24 * 3600 - 1, 1)])
+def test_el_worker_recalcula_al_arrancar_y_cada_24_horas(raiz, revisor, segundos, recalculos):
+    mensajes = []
+    crear_corrida(Corrida.Alcance.TODOS, revisor)
+    # Llamadas al reloj: marca tras el primer recálculo, chequeo en la 2.ª vuelta, marca.
+    trabajar(raiz, informar=mensajes.append, reloj=_reloj(0, segundos, segundos))
+    assert [m for m in mensajes if m.startswith("Estados recalculados")] == [
+        "Estados recalculados por vigencia: 0 profesores.",
+        "Estados recalculados por vigencia: 2 profesores.",
+    ][:recalculos]

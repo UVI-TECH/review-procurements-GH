@@ -1,33 +1,29 @@
-"""El catálogo inicial reproduce DOCS de legado/revisar_contrataciones.py."""
+"""Catálogo: el legado (migración 0002) más los requisitos de Gestión Humana 2026-2 (0008)."""
 
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
 from apps.contrataciones.models import AliasTipoDocumento, TipoDocumento
+from apps.motor.catalogo import cargar_catalogo
+from tests.fixtures.catalogo import DOCS, OBS_BONO, catalogo_inicial
 
 pytestmark = pytest.mark.django_db
 
-DOCS_LEGADO = [
-    ("certificado_antecedentes_disciplinarios", "Antecedentes Disciplinarios (Procuraduría)"),
-    ("boletin_responsabilidades_fiscales", "Responsabilidades Fiscales (Contraloría)"),
-    ("certificado_antecedentes_judiciales", "Antecedentes Judiciales (Policía)"),
-    ("certificado_registro_nacional_medidas_correctivas", "Medidas Correctivas"),
-    ("formato_autorizacion_consulta_inhabilidades", "Formato Autorización Consulta"),
-    ("consulta_inhabilidades_delitos_sexuales", "Consulta Inhabilidades Delitos Sexuales"),
-    ("certificado_registro_deudores_morosos", "REDAM (Deudores Morosos)"),
-    ("certificados_eps_afp", "Certificados EPS/AFP"),
-    ("certificado_medico_laboral", "Certificado Médico Laboral"),
-]
+
+def test_tipos_activos_en_orden_iguales_al_catalogo_de_pruebas():
+    tipos = TipoDocumento.objects.filter(activo=True).order_by("orden")
+    assert list(tipos.values_list("codigo", "etiqueta")) == DOCS
 
 
-def test_migracion_crea_los_9_tipos_en_orden():
-    tipos = list(TipoDocumento.objects.order_by("orden").values_list("codigo", "etiqueta"))
-    assert tipos == DOCS_LEGADO
+def test_diez_tipos_activos_y_obligatorios():
+    assert TipoDocumento.objects.filter(obligatorio=True, activo=True).count() == 10
 
 
-def test_tipos_iniciales_obligatorios_y_activos():
-    assert TipoDocumento.objects.filter(obligatorio=True, activo=True).count() == 9
+def test_eps_afp_viejo_queda_inactivo_con_su_historial():
+    viejo = TipoDocumento.objects.get(codigo="certificados_eps_afp")
+    assert not viejo.activo
+    assert viejo.etiqueta == "Certificados EPS/AFP"
 
 
 def test_solo_el_formato_de_autorizacion_requiere_firma():
@@ -35,9 +31,53 @@ def test_solo_el_formato_de_autorizacion_requiere_firma():
     assert list(con_firma) == ["formato_autorizacion_consulta_inhabilidades"]
 
 
+def test_vigencia_de_30_dias_salvo_formato_y_examen_medico():
+    sin_vigencia = TipoDocumento.objects.filter(activo=True, vigencia_dias__isnull=True)
+    assert set(sin_vigencia.values_list("codigo", flat=True)) == {
+        "formato_autorizacion_consulta_inhabilidades",
+        "certificado_medico_laboral",
+    }
+    assert set(
+        TipoDocumento.objects.filter(activo=True, vigencia_dias__isnull=False).values_list(
+            "vigencia_dias", flat=True
+        )
+    ) == {30}
+
+
+def test_ningun_tipo_exige_logo_todavia():
+    assert not TipoDocumento.objects.filter(requiere_logo=True).exists()
+
+
+def test_alias_de_pension_con_etiqueta_propia_y_sin_vigencia():
+    pension = AliasTipoDocumento.objects.get(codigo="resolucion_pension_vejez")
+    bono = AliasTipoDocumento.objects.get(codigo="carta_bono_pensional")
+    for alias in (pension, bono):
+        assert alias.tipo.codigo == "certificado_afp"
+        assert alias.etiqueta and not alias.hereda_vigencia and alias.vigencia_dias is None
+    assert bono.observacion == OBS_BONO
+    assert pension.observacion == ""
+
+
+def test_catalogo_de_la_base_igual_al_de_pruebas():
+    base, prueba = cargar_catalogo(), catalogo_inicial()
+    assert base.activos == prueba.activos
+
+
+def test_catalogo_resuelve_etiqueta_vigencia_y_observacion_del_alias():
+    catalogo = catalogo_inicial()
+    assert catalogo.resolver("carta_bono_pensional").codigo == "certificado_afp"
+    assert catalogo.etiqueta_de("carta_bono_pensional") == "Carta de bono pensional"
+    assert catalogo.etiqueta_de("certificado_afp") == "Certificado de fondo de pensiones (AFP)"
+    assert catalogo.vigencia_de("certificado_afp") == 30
+    assert catalogo.vigencia_de("carta_bono_pensional") is None
+    assert catalogo.vigencia_de("examen_medico_laboral_dotc") is None  # hereda del médico
+    assert catalogo.observacion_de("carta_bono_pensional") == OBS_BONO
+    assert catalogo.observacion_de("certificado_afp") == ""
+    assert catalogo.etiqueta_de("otro") is None and catalogo.vigencia_de("otro") is None
+
+
 def test_alias_dotc_apunta_al_certificado_medico(tipo_medico):
-    alias = AliasTipoDocumento.objects.get()
-    assert alias.codigo == "examen_medico_laboral_dotc"
+    alias = AliasTipoDocumento.objects.get(codigo="examen_medico_laboral_dotc")
     assert alias.tipo == tipo_medico
 
 

@@ -17,11 +17,17 @@ import hashlib
 from dataclasses import dataclass, replace
 
 from django.db.models import F, Q
+from django.utils import timezone
 
-from apps.motor.reglas import EstadoProfesor, evaluar_profesor, revalidar_por_cedula
+from apps.motor.reglas import (
+    EstadoProfesor,
+    aplicar_vigencia,
+    evaluar_profesor,
+    revalidar_por_cedula,
+)
 from apps.motor.resultado import ResultadoDocumento
 
-from ..models import Analisis, Documento, Revision
+from ..models import Analisis, Documento, Profesor, Revision
 
 Decision = Revision.Decision
 
@@ -50,6 +56,10 @@ def resultado_de_analisis(analisis, documento):
         numero_documento=analisis.numero_documento,
         nombre_persona=analisis.nombre_persona,
         tiene_firma=analisis.tiene_firma,
+        fecha_expedicion=analisis.fecha_expedicion,
+        cubre=analisis.cubre,
+        tiene_logo_oficial=analisis.tiene_logo_oficial,
+        es_plantilla_institucional=analisis.es_plantilla_institucional,
         datos_extra=analisis.datos_extra,
         observaciones=analisis.observaciones,
         modificado_en=documento.modificado_en,
@@ -100,6 +110,11 @@ def _documentos_presentes(profesor):
     return filas
 
 
+def hoy():
+    """Fecha de referencia de la vigencia: hoy en America/Bogota (TIME_ZONE, ADR 0006)."""
+    return timezone.localdate()
+
+
 def evaluar(profesor, catalogo):
     """(EvaluacionProfesor, [DocumentoEvaluado]) del profesor, con las revisiones."""
     filas = _documentos_presentes(profesor)
@@ -119,8 +134,11 @@ def evaluar(profesor, catalogo):
         if revision is None or revision.decision not in no_vota
     ]
     confirmada = profesor.cedula_confirmada or None
-    revalidados = revalidar_por_cedula(
-        ia, catalogo, cedula_confirmada=confirmada, evidencia=evidencia
+    # La vigencia va después de la cédula: si no, la cédula rescataría a un vencido.
+    revalidados = aplicar_vigencia(
+        revalidar_por_cedula(ia, catalogo, cedula_confirmada=confirmada, evidencia=evidencia),
+        catalogo,
+        hoy(),
     )
     evaluados = [
         DocumentoEvaluado(documento, analisis, revision, resultado, _efectivo(resultado, revision))
@@ -180,6 +198,7 @@ def recalcular_estado(profesor, catalogo):
     profesor.requiere_atencion = bool(
         evaluacion.ilegibles
         or evaluacion.cedula_ambigua
+        or evaluacion.fechas_sin_leer
         or any(e.documento.reintentos_agotados for e in evaluados)
     )
     profesor.save(
@@ -209,3 +228,13 @@ def filtrar_por_verificacion(profesores, valor):
     if valor == "desactualizada":
         return profesores.filter(verificado_por__isnull=False).exclude(vigente)
     return profesores
+
+
+def recalcular_todos(catalogo):
+    """Recalcula el estado de los profesores presentes. La vigencia cambia con los días
+    aunque no cambien los archivos: el worker lo llama al arrancar y cada 24 h (ADR 0006).
+    Una carpeta que desapareció conserva su último estado (ADR 0004)."""
+    profesores = Profesor.objects.filter(carpeta_presente=True)
+    for profesor in profesores:
+        recalcular_estado(profesor, catalogo)
+    return profesores.count()

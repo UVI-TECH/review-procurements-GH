@@ -17,3 +17,13 @@
 
 - Solo puede haber un worker por equipo. El bloqueo (`worker.lock`) y el PID (`worker.pid`) quedan, por defecto, junto a la base de datos.
 - Si el worker se cierra a mitad de una corrida (apagón, cierre forzado), al volver a iniciarlo la corrida continúa sin repetir documentos.
+- El worker recalcula el estado de todos los profesores al arrancar y cada 24 horas, porque la vigencia de los certificados cambia con los días aunque no cambien los archivos (ADR 0006). Si el worker no está corriendo, el tablero no refleja los vencimientos hasta que vuelva a arrancar. El detalle de un profesor sí evalúa siempre contra el día de hoy.
+
+## Al cambiar el prompt o el esquema de la IA
+
+Los análisis guardados no se modifican y el procesamiento es incremental: un archivo que no cambió no se vuelve a analizar. Por eso, cuando cambian el prompt, el esquema de la herramienta o el catálogo de tipos, los análisis viejos se quedan con lo que pedía la versión anterior. Procedimiento general:
+
+1. Revisa el costo con `uv run python manage.py crear_corrida --alcance todos --usuario <tu_usuario> --en-seco`.
+2. Si el estimado es aceptable, lanza la corrida `todos` y deja trabajar al worker.
+
+Aplica a todo entorno con análisis previos, como el clon de validación, y se repite cada vez que cambie el prompt. Producción todavía no existe: arrancará con el prompt de los requisitos 2026-2 y sin análisis viejos.

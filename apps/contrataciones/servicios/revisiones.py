@@ -58,6 +58,11 @@ def crear_revision(documento, usuario, decision, comentario="", tipo_corregido=N
                 f"La cédula del documento ({ajena}) no coincide con la del profesor "
                 f"({evaluacion.cedula}). Explica en el comentario por qué lo aceptas."
             )
+        if evaluado.resultado_ia.vencido:
+            raise ValidationError(
+                f"El certificado venció el {evaluado.resultado_ia.vence_el:%d/%m/%Y}. "
+                "Explica en el comentario por qué lo aceptas."
+            )
 
     revision = Revision(
         analisis=evaluado.analisis,
