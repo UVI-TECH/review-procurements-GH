@@ -644,3 +644,21 @@ def test_detalle_muestra_pendiente_y_no_error(client, revisor, datos):
     panel = html[html.index('id="panel"') :]
     assert "Se analizará en la próxima corrida." in panel
     assert "<dt>Error</dt>" not in panel
+
+
+def test_estado_pendiente_de_analisis_en_tablero_y_filtro(client, consulta, datos):
+    ana = datos["ana"]
+    _sin_analizar(ana, "zz-nuevo.pdf")
+    recalcular_estado(ana, cargar_catalogo())
+    ana.refresh_from_db()
+    assert ana.estado == "PENDIENTE_ANALISIS"
+    entrar(client, consulta)
+    html = client.get(reverse("tablero")).content.decode()
+    assert (
+        '<span class="insignia estado-pendiente_analisis"><span aria-hidden="true">⏳</span> '
+        "Pendiente de análisis</span>"
+    ) in html
+    assert 'href="?estado=PENDIENTE_ANALISIS"' in html  # total por estado
+    assert '<option value="PENDIENTE_ANALISIS"' in html  # filtro
+    html = client.get(reverse("tablero"), {"estado": "PENDIENTE_ANALISIS"}).content.decode()
+    assert "Ana Ejemplo" in html and "Beto Prueba" not in html

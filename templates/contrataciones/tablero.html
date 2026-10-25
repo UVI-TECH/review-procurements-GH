@@ -5,7 +5,7 @@
 
 <ul class="totales" aria-label="Profesores por estado">
   {% for valor, nombre, cantidad in totales %}
-    <li><a class="total estado-{{ valor|lower }}" href="?estado={{ valor }}"><span class="total-cifra">{{ cantidad }}</span> <span class="total-nombre">{{ nombre }}</span></a></li>
+    <li><a class="total estado-{{ valor|lower }}" href="?estado={{ valor }}"><span class="total-cifra">{{ cantidad }}</span> <span class="total-nombre">{% if valor == "PENDIENTE_ANALISIS" %}<span aria-hidden="true">⏳</span> {% endif %}{{ nombre }}</span></a></li>
   {% endfor %}
 </ul>
 
