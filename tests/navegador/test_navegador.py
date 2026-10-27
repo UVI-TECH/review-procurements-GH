@@ -165,3 +165,16 @@ def test_colores_de_las_insignias_del_detalle(page, entrar, problemas):
     assert color(page, ".lista-documentos .insignia.semaforo-pendiente") == color_de_variable(
         page, "--pendiente"
     )
+
+
+def test_ningun_tooltip_se_ve_al_cargar_el_tablero(page, entrar, problemas):
+    entrar()
+    tooltips = page.locator("th.col-tipo .tooltip")
+    expect(tooltips.first).to_be_attached()
+    for indice in range(tooltips.count()):
+        expect(tooltips.nth(indice)).to_be_hidden()
+    encabezado = page.locator("th.col-tipo").nth(2)
+    encabezado.hover()
+    expect(encabezado.locator(".tooltip")).to_be_visible()
+    page.mouse.move(0, 0)
+    expect(encabezado.locator(".tooltip")).to_be_hidden()

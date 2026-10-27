@@ -95,3 +95,19 @@ def test_produccion_se_niega_con_pausa_simulada():
     resultado = _cargar_produccion(MOTOR_SIMULADO_PAUSA_SEGUNDOS="0.5")
     assert resultado.returncode != 0
     assert "MOTOR_SIMULADO_PAUSA_SEGUNDOS" in resultado.stderr
+
+
+def test_validacion_sirve_los_estaticos_desde_static_sin_collectstatic():
+    resultado = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from config.settings import validacion as v; "
+            "print(v.STATIC_ROOT, v.WHITENOISE_USE_FINDERS)",
+        ],
+        cwd=BASE_DIR,
+        env=os.environ,
+        capture_output=True,
+        text=True,
+    )
+    assert resultado.stdout.strip() == "None True", resultado.stderr

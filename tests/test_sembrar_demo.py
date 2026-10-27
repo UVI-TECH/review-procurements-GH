@@ -129,3 +129,21 @@ def test_casos_de_los_requisitos_2026_2(entorno):
     profesor, evaluacion, _ = caso("Lorena Ejemplo Pradera")
     assert profesor.estado == EstadoProfesor.COMPLETO and evaluacion.fechas_sin_leer
     assert profesor.requiere_atencion
+
+
+def test_semaforo_del_tablero_con_la_demo(entorno, client):
+    """Cada celda muestra ✓, ✗ o !: nunca "·" (sin dato) en profesores ya analizados."""
+    import re
+
+    from django.contrib.auth import get_user_model
+    from django.urls import reverse
+
+    call_command("sembrar_demo", "--usuario", "revisor")
+    client.force_login(get_user_model().objects.get(username="revisor"))
+    iconos = set()
+    for pagina in (1, 2):
+        html = client.get(reverse("tablero"), {"ocultos": "1", "pagina": pagina}).content.decode()
+        iconos |= set(
+            re.findall(r'class="semaforo semaforo-\w+"><span aria-hidden="true">(.)', html)
+        )
+    assert iconos == {"✓", "✗", "!"}
