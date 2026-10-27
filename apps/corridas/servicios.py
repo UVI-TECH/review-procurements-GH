@@ -9,6 +9,7 @@ from django.db.models import Avg, Exists, OuterRef
 from django.utils import timezone
 
 from apps.contrataciones.models import Analisis, Corrida, Documento
+from apps.contrataciones.servicios.estado import analisis_desactualizado
 from apps.cuentas.auditoria import registrar
 from apps.motor.fuentes import FuenteCarpetaLocal
 
@@ -36,6 +37,8 @@ def documentos_a_analizar(alcance, profesor=None, corrida=None):
       Analisis exitoso o ilegible (un error no cuenta: se reintenta).
     - un_profesor: todos los del profesor, incluidos los de reintentos agotados
       (es la vía manual para volver a probar).
+    - desactualizados: solo los cuyo análisis vigente es de una versión anterior del
+      prompt (ADR 0006); así un cambio de prompt no obliga a reanalizar todo.
     Con una corrida, se excluye lo que ya analizó (reanudación).
     """
     documentos = Documento.objects.filter(presente=True, profesor__carpeta_presente=True)
@@ -43,6 +46,8 @@ def documentos_a_analizar(alcance, profesor=None, corrida=None):
         documentos = documentos.filter(profesor=profesor)
     else:
         documentos = documentos.exclude(reintentos_agotados=True)
+    if alcance == Corrida.Alcance.DESACTUALIZADOS:
+        documentos = documentos.filter(analisis_desactualizado())
     if alcance == Corrida.Alcance.NUEVOS_Y_MODIFICADOS:
         con_resultado = Analisis.objects.filter(
             documento=OuterRef("pk"), sha256=OuterRef("sha256")

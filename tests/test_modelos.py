@@ -243,7 +243,12 @@ def test_estados_y_alcances_de_corrida():
         "fallida",
         "cancelada",
     }
-    assert set(Corrida.Alcance.values) == {"todos", "nuevos_y_modificados", "un_profesor"}
+    assert set(Corrida.Alcance.values) == {
+        "todos",
+        "nuevos_y_modificados",
+        "un_profesor",
+        "desactualizados",
+    }
 
 
 def test_corrida_empieza_pendiente(corrida):

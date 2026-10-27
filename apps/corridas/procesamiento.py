@@ -28,6 +28,7 @@ from apps.cuentas.auditoria import registrar
 from apps.motor.aislamiento import InspectorAislado
 from apps.motor.catalogo import cargar_catalogo
 from apps.motor.fuentes import ErrorFuente
+from apps.motor.prompts import VERSION_PROMPT
 from apps.motor.resultado import ResultadoDocumento
 from apps.motor.servicio import crear_cliente as crear_cliente_del_motor
 
@@ -294,6 +295,7 @@ def guardar_analisis(documento, corrida, sha256, resultado):
         corrida=corrida,
         sha256=sha256,
         modelo=(resultado.modelo or "")[:100],
+        version_prompt=VERSION_PROMPT,
         tipo_detectado=tipo[:80],
         es_valido=False if resultado.es_error else resultado.es_valido,
         # Recortes defensivos: la IA puede devolver textos más largos que el campo.

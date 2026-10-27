@@ -45,6 +45,8 @@ class ResultadoDocumento:
     fecha_sin_leer: bool = False  # el tipo vence, pero no hay fecha confiable
     vence_el: date | None = None
     por_vencer: bool = False  # vence en 7 días o menos
+    # Analizado con una versión anterior del prompt: requiere reanálisis (ADR 0006).
+    desactualizado: bool = False
     datos_extra: dict = field(default_factory=dict)
     observaciones: str = ""
     error: str = ""

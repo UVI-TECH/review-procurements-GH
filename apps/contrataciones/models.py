@@ -254,6 +254,8 @@ class Corrida(models.Model):
         TODOS = "todos", "Todos"
         NUEVOS_Y_MODIFICADOS = "nuevos_y_modificados", "Nuevos y modificados"
         UN_PROFESOR = "un_profesor", "Un profesor"
+        # Los analizados con una versión anterior del prompt (ADR 0006).
+        DESACTUALIZADOS = "desactualizados", "Desactualizados"
 
     class Estado(models.TextChoices):
         PENDIENTE = "pendiente", "Pendiente"
@@ -326,6 +328,8 @@ class Analisis(ModeloInmutable):
     # Hash del archivo analizado: dice si una revisión humana sigue aplicando (ADR 0002).
     sha256 = models.CharField(max_length=64, db_index=True)
     modelo = models.CharField(max_length=100)
+    # motor.prompts.VERSION_PROMPT con la que se analizó; nula: anterior a guardarla.
+    version_prompt = models.PositiveSmallIntegerField(null=True, blank=True)
     # Código normalizado tal como lo devolvió la IA; puede no estar en el catálogo.
     tipo_detectado = models.CharField(max_length=80, blank=True, db_index=True)
     es_valido = models.BooleanField(null=True)

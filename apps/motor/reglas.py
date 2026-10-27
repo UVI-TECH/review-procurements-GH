@@ -153,6 +153,11 @@ def aplicar_vigencia(resultados, catalogo, hoy):
             salida.append(r)
             continue
         fecha = r.fecha_expedicion
+        if fecha is None and r.desactualizado:
+            # Un prompt anterior no pedía la fecha: no es una fecha sin leer, es un análisis
+            # que hay que repetir (lo dice el detalle; no marca "requiere atención").
+            salida.append(r)
+            continue
         if fecha is None or fecha > hoy:
             motivo = "no se pudo leer" if fecha is None else "es posterior a hoy"
             salida.append(

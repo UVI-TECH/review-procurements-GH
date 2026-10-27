@@ -9,6 +9,13 @@ import re
 
 from .esquema import NOMBRE_HERRAMIENTA, TIPO_OTRO
 
+# Versión del prompt y del esquema de la herramienta. Súbela en cada cambio de cualquiera
+# de los dos: cada Analisis la guarda, y la corrida "desactualizados" reanaliza los de una
+# versión anterior (ADR 0006). tests/test_motor_catalogo_esquema.py fija una huella por
+# versión para que un cambio sin subirla no pase desapercibido.
+# 1: motor migrado (ADR 0003). 2: requisitos 2026-2 (PR #11).
+VERSION_PROMPT = 2
+
 # Pistas del legado (ESQUEMAS) para reconocer cada tipo; las que falten usan la etiqueta.
 PISTAS = {
     "certificado_antecedentes_disciplinarios": (

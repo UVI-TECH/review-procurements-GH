@@ -30,7 +30,12 @@ from apps.motor.fuentes import ErrorFuente
 from apps.motor.reglas import solo_digitos
 
 from .models import Analisis, Documento, EstadoProfesor, Profesor, Revision, TipoDocumento
-from .servicios.estado import evaluar, filtrar_por_verificacion
+from .servicios.estado import (
+    analisis_desactualizado,
+    documentos_desactualizados,
+    evaluar,
+    filtrar_por_verificacion,
+)
 from .servicios.revisiones import (
     cedula_que_no_coincide,
     confirmar_cedula,
@@ -96,6 +101,7 @@ def tablero(request):
         "verificacion": request.GET.get("verificacion", ""),
         "atencion": request.GET.get("atencion") == "1",
         "pendientes": request.GET.get("pendientes") == "1",
+        "desactualizados": request.GET.get("desactualizados") == "1",
         "ocultos": request.GET.get("ocultos") == "1",
     }
 
@@ -115,6 +121,14 @@ def tablero(request):
         profesores = profesores.filter(requiere_atencion=True)
     if filtros["pendientes"]:
         profesores = profesores.filter(Exists(_pendientes_de_analisis()))
+    if filtros["desactualizados"]:
+        profesores = profesores.filter(
+            Exists(
+                Documento.objects.filter(profesor=OuterRef("pk"), presente=True).filter(
+                    analisis_desactualizado()
+                )
+            )
+        )
     if filtros["q"]:
         busqueda = Q(nombre__icontains=filtros["q"]) | Q(carpeta__icontains=filtros["q"])
         if ve_datos_personales and solo_digitos(filtros["q"]):
@@ -152,6 +166,8 @@ def tablero(request):
         "verificaciones": Profesor.Verificacion.choices,
         "sin_pagina": sin_pagina,
         "puede_ver_detalle": ve_datos_personales,
+        # Aviso global para Administrador y Revisor (ADR 0006); no marca "requiere atención".
+        "total_desactualizados": documentos_desactualizados().count() if ve_datos_personales else 0,
         "ve_cedulas": ve_datos_personales,
     }
     return _responder(
@@ -220,6 +236,7 @@ def detalle(request, pk):
                 "fecha_sin_leer": e.resultado_ia.fecha_sin_leer,
                 "cubre": COBERTURA.get(e.resultado_ia.cubre, ""),
                 "observacion_alias": catalogo.observacion_de(tipo_ia),
+                "desactualizado": e.resultado_ia.desactualizado,
             }
         )
 

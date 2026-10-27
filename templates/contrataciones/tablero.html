@@ -3,6 +3,11 @@
 {% block contenido %}
 <h1>Tablero de profesores</h1>
 
+{% if total_desactualizados %}
+  {# El botón llegará con la pantalla de corridas (Fase 4b); por ahora, el comando. #}
+  <p class="aviso aviso-desactualizado"><strong>{{ total_desactualizados }} documento{{ total_desactualizados|pluralize }} fue{{ total_desactualizados|pluralize:"ron" }} analizado{{ total_desactualizados|pluralize }} con una versión anterior del prompt.</strong> Lanza una corrida «Desactualizados»: <code>uv run python manage.py crear_corrida --alcance desactualizados --usuario &lt;tu_usuario&gt;</code></p>
+{% endif %}
+
 <ul class="totales" aria-label="Profesores por estado">
   {% for valor, nombre, cantidad in totales %}
     <li><a class="total estado-{{ valor|lower }}" href="?estado={{ valor }}"><span class="total-cifra">{{ cantidad }}</span> <span class="total-nombre">{% if valor == "PENDIENTE_ANALISIS" %}<span aria-hidden="true">⏳</span> {% endif %}{{ nombre }}</span></a></li>
@@ -50,6 +55,10 @@
     <div class="campo campo-casilla">
       <input type="checkbox" id="pendientes" name="pendientes" value="1"{% if filtros.pendientes %} checked{% endif %}>
       <label for="pendientes">Solo con documentos pendientes de análisis</label>
+    </div>
+    <div class="campo campo-casilla">
+      <input type="checkbox" id="desactualizados" name="desactualizados" value="1"{% if filtros.desactualizados %} checked{% endif %}>
+      <label for="desactualizados">Solo con análisis desactualizados</label>
     </div>
   </fieldset>
   <button type="submit" class="boton">Filtrar</button>
