@@ -407,3 +407,38 @@ def test_fecha_de_referencia_invalida_da_un_error_claro(fecha):
             "--fecha-referencia",
             fecha,
         )
+
+
+def test_faltan_eps_y_afp_donde_al_legado_le_faltaba_su_tipo_unico(legado):
+    nuevos = [
+        con_fecha(r)
+        for r in completos()
+        if r.tipo_detectado not in ("certificado_eps", "certificado_afp")
+    ]
+    informe = comparar_nuevos(nuevos, legado)
+    assert "certificados_eps_afp" in informe["ia_nueva_con_reglas_del_legado"]["faltantes"]
+    assert informe["diferencias_intencionales"] == ["separacion_eps_afp"]
+    assert informe["diferencias_no_explicadas"] == []
+
+
+def test_tipo_distinto_se_reporta_aunque_el_estado_coincida(legado):
+    nuevos = [con_fecha(r) for r in completos()]
+    # La IA del legado leyó el formato como la consulta y viceversa: el estado coincide.
+    viejos = [a_dict_legado(r) for r in nuevos]
+    i, j = (
+        next(k for k, r in enumerate(nuevos) if r.tipo_detectado == codigo)
+        for codigo in (FORMATO, "consulta_inhabilidades_delitos_sexuales")
+    )
+    viejos[i]["tipo_detectado"], viejos[j]["tipo_detectado"] = (
+        viejos[j]["tipo_detectado"],
+        viejos[i]["tipo_detectado"],
+    )
+    informe = comparar_nuevos(nuevos, legado, viejos)
+    assert informe["coincide_estado_detallado"]
+    assert [d["nuevo"] for d in informe["documentos_tipo_distinto"]] == [
+        FORMATO,
+        "consulta_inhabilidades_delitos_sexuales",
+    ]
+    resumen = resumir([informe, comparar_nuevos(nuevos, legado)])
+    assert resumen["documentos_tipo_distinto"] == 2
+    assert resumen["documentos_tipo_distinto_con_estado_igual"] == 2
