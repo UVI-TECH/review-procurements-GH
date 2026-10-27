@@ -21,9 +21,17 @@
 
 ## Al cambiar el prompt o el esquema de la IA
 
-Los análisis guardados no se modifican y el procesamiento es incremental: un archivo que no cambió no se vuelve a analizar. Por eso, cuando cambian el prompt, el esquema de la herramienta o el catálogo de tipos, los análisis viejos se quedan con lo que pedía la versión anterior. Procedimiento general:
+Los análisis guardados no se modifican y el procesamiento es incremental: un archivo que no cambió no se vuelve a analizar. Por eso, cuando cambian el prompt o el esquema de la herramienta, los análisis viejos se quedan con lo que pedía la versión anterior.
 
-1. Revisa el costo con `uv run python manage.py crear_corrida --alcance todos --usuario <tu_usuario> --en-seco`.
-2. Si el estimado es aceptable, lanza la corrida `todos` y deja trabajar al worker.
+Cada análisis guarda la versión del prompt con que se hizo (`VERSION_PROMPT`, ADR 0006). Cuando la versión cambia, el tablero avisa a los usuarios Administrador y Revisor cuántos documentos quedaron desactualizados, y el detalle marca cada uno. Procedimiento general:
 
-Aplica a todo entorno con análisis previos, como el clon de validación, y se repite cada vez que cambie el prompt. Producción todavía no existe: arrancará con el prompt de los requisitos 2026-2 y sin análisis viejos.
+1. Revisa el costo con `uv run python manage.py crear_corrida --alcance desactualizados --usuario <tu_usuario> --en-seco`.
+2. Si el estimado es aceptable, lanza la corrida `desactualizados` (el mismo comando sin `--en-seco`) y deja trabajar al worker. Solo reanaliza los documentos de una versión anterior, no todo.
+
+Un cambio del catálogo de tipos hecho desde el admin también cambia el prompt, pero no la versión. En ese caso, o si hay dudas, usa el alcance `todos`.
+
+Aplica a todo entorno con análisis previos, como el clon de validación, y se repite cada vez que cambie el prompt. Producción todavía no existe: arrancará con el prompt vigente y sin análisis viejos.
+
+## Al actualizar la aplicación
+
+Con la configuración de producción, WhiteNoise sirve los estáticos recolectados en `staticfiles/`. Después de cada actualización (`git pull`), corre `uv run python manage.py collectstatic --noinput`; si no, el navegador recibe el `app.css` y el `app.js` de la versión anterior. El clon de validación no lo necesita: con `config.settings.validacion` los estáticos salen directo de `static/`.
