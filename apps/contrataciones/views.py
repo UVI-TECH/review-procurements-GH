@@ -27,7 +27,7 @@ from apps.cuentas.auditoria import registrar
 from apps.cuentas.models import RegistroAuditoria
 from apps.motor.catalogo import cargar_catalogo
 from apps.motor.fuentes import ErrorFuente
-from apps.motor.reglas import solo_digitos
+from apps.motor.reglas import CAUSAS, solo_digitos
 
 from .models import Analisis, Documento, EstadoProfesor, Profesor, Revision, TipoDocumento
 from .servicios.estado import (
@@ -230,6 +230,10 @@ def detalle(request, pk):
                 "cedula_ajena": cedula_que_no_coincide(e, evaluacion.cedula or ""),
                 # Vigencia y lo que solo se observa (ADR 0006).
                 "vencido": e.resultado_ia.vencido,
+                # Lo que dijo la IA frente al resultado final y sus causas (ADR 0006).
+                "ia_valido": bool(e.analisis and e.analisis.es_valido),
+                "causas": [CAUSAS[c] for c in e.resultado_ia.causas],
+                "formato_sin_cedula": e.resultado_ia.formato_sin_cedula,
                 "por_vencer": e.resultado_ia.por_vencer
                 and bool(e.resultado)
                 and e.resultado.es_valido,
