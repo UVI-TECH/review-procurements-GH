@@ -203,6 +203,7 @@ def recalcular_estado(profesor, catalogo):
         evaluacion.ilegibles
         or evaluacion.cedula_ambigua
         or evaluacion.fechas_sin_leer
+        or evaluacion.formatos_sin_cedula
         or any(e.documento.reintentos_agotados for e in evaluados)
     )
     profesor.save(

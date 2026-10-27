@@ -47,6 +47,10 @@ class ResultadoDocumento:
     por_vencer: bool = False  # vence en 7 días o menos
     # Analizado con una versión anterior del prompt: requiere reanálisis (ADR 0006).
     desactualizado: bool = False
+    # Formato de autorización sin la cédula del texto o de la firma: revisión humana.
+    formato_sin_cedula: bool = False
+    # Reglas que cambiaron la validez que dio la IA (ver reglas.CAUSAS), en orden.
+    causas: tuple[str, ...] = ()
     datos_extra: dict = field(default_factory=dict)
     observaciones: str = ""
     error: str = ""

@@ -455,3 +455,19 @@ def test_recalcular_todos_salta_las_carpetas_desaparecidas(prof, corrida, catalo
     assert recalcular_todos(catalogo) == 0
     prof.refresh_from_db()
     assert prof.estado == EstadoProfesor.COMPLETO  # conserva su último estado (ADR 0004)
+
+
+def test_formato_sin_diligenciar_requiere_atencion(prof, corrida, catalogo):
+    completo(
+        prof,
+        corrida,
+        formato_autorizacion_consulta_inhabilidades={"formato": {"cedula_firma": CEDULA}},
+    )
+    assert estado(prof, catalogo) == EstadoProfesor.COMPLETO
+    assert prof.requiere_atencion
+
+
+def test_formato_a_nombre_de_otra_persona_queda_con_problemas(prof, corrida, catalogo):
+    datos = {"cedula_texto": OTRA, "cedula_firma": CEDULA}
+    completo(prof, corrida, formato_autorizacion_consulta_inhabilidades={"formato": datos})
+    assert estado(prof, catalogo) == EstadoProfesor.CON_PROBLEMAS

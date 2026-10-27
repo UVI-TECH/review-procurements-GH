@@ -17,6 +17,25 @@ OBS_CEDULA_AMBIGUA = "Cédula ambigua: requiere revisión humana. "
 EPS = "certificado_eps"
 AFP = "certificado_afp"
 DIAS_AVISO_POR_VENCER = 7
+FORMATO = "formato_autorizacion_consulta_inhabilidades"
+OBS_FORMATO_OTRA_PERSONA = (
+    "El texto del formato autoriza a nombre de otra persona (C.C. distinta): debe "
+    "diligenciarse con sus propios datos. "
+)
+OBS_FORMATO_SIN_CEDULA = "No se pudo leer la cédula del texto o de la firma del formato: revisar. "
+
+# Por qué una regla cambió la validez que dio la IA. El detalle separa lo que dijo la IA
+# del resultado final: es la base del control de calidad (ADR 0006).
+CAUSAS = {
+    "cedula_ajena": "la cédula no es la del profesor",
+    "cedula_coincide": "la cédula coincide con la del profesor",
+    "vigencia": "certificado vencido",
+    "formato_otra_persona": "el formato está a nombre de otra persona",
+}
+
+
+def _con_causa(r, causa, **cambios):
+    return replace(r, causas=(*r.causas, causa), **cambios)
 
 
 class EstadoProfesor(StrEnum):
@@ -75,18 +94,52 @@ def revalidar_por_cedula(resultados, catalogo, *, cedula_confirmada=None, eviden
     evidencia = resultados if evidencia is None else evidencia
     if cedula_confirmada:
         modal = solo_digitos(cedula_confirmada)
-        return [_revalidar(r, modal, catalogo) for r in resultados]
-    if cedula_ambigua(evidencia):
-        return [
+        revalidados = [_revalidar(r, modal, catalogo) for r in resultados]
+    elif cedula_ambigua(evidencia):
+        modal = None
+        revalidados = [
             replace(r, observaciones=OBS_CEDULA_AMBIGUA + r.observaciones)
             if solo_digitos(r.numero_documento)
             else r
             for r in resultados
         ]
-    modal = cedula_modal(evidencia)
-    if not modal:
-        return list(resultados)
-    return [_revalidar(r, modal, catalogo) for r in resultados]
+    else:
+        modal = cedula_modal(evidencia)
+        revalidados = (
+            [_revalidar(r, modal, catalogo) for r in resultados] if modal else list(resultados)
+        )
+    # Después de la cédula: si no, la cédula de la firma rescataría un formato ajeno.
+    return [_revisar_formato(r, modal, catalogo) for r in revalidados]
+
+
+def _revisar_formato(r, cedula_profesor, catalogo):
+    """Formato de autorización: la cédula del texto debe ser la de la firma y la del
+    profesor (solo por cédula, con solo_digitos; los nombres solo se muestran). Si falta
+    alguna de las dos, no invalida: queda para revisión humana (ADR 0006)."""
+    tipo = catalogo.resolver(r.tipo_detectado)
+    if (
+        tipo is None
+        or tipo.codigo != FORMATO
+        or r.es_error
+        or r.es_ilegible
+        or r.es_pendiente
+        or r.desactualizado  # un prompt anterior no pedía estos datos
+    ):
+        return r
+    texto = solo_digitos(r.datos_extra.get("cedula_texto"))
+    firma = solo_digitos(r.datos_extra.get("cedula_firma"))
+    if not texto or not firma:
+        return replace(
+            r, formato_sin_cedula=True, observaciones=OBS_FORMATO_SIN_CEDULA + r.observaciones
+        )
+    if texto != firma or (cedula_profesor and texto != cedula_profesor):
+        return _con_causa(
+            r,
+            "formato_otra_persona",
+            es_valido=False,
+            observaciones=OBS_FORMATO_OTRA_PERSONA + r.observaciones,
+        )
+    return r
 
 
 def _revalidar(r, modal, catalogo):
@@ -95,8 +148,9 @@ def _revalidar(r, modal, catalogo):
         return r
     if cedula != modal:
         if r.es_valido:
-            return replace(
+            return _con_causa(
                 r,
+                "cedula_ajena",
                 es_valido=False,
                 observaciones=f"La cédula {cedula} no coincide con la del profesor ({modal}). "
                 + r.observaciones,
@@ -110,14 +164,16 @@ def _revalidar(r, modal, catalogo):
         return r
     if tipo.requiere_firma:
         if r.tiene_firma:
-            return replace(
+            return _con_causa(
                 r,
+                "cedula_coincide",
                 es_valido=True,
                 observaciones="Válido (cédula coincide y documento firmado). " + r.observaciones,
             )
         return r
-    return replace(
+    return _con_causa(
         r,
+        "cedula_coincide",
         es_valido=True,
         observaciones="Válido (verificado por cédula; la falta de nombre no invalida). "
         + r.observaciones,
@@ -173,8 +229,9 @@ def aplicar_vigencia(resultados, catalogo, hoy):
         vence_el = fecha + timedelta(days=dias_maximos)
         if dias > dias_maximos:
             salida.append(
-                replace(
+                _con_causa(
                     r,
+                    "vigencia",
                     es_valido=False,
                     vencido=True,
                     vence_el=vence_el,
@@ -193,17 +250,23 @@ def aplicar_vigencia(resultados, catalogo, hoy):
     return salida
 
 
+COBERTURA = {"eps": (EPS,), "afp": (AFP,), "ambos": (EPS, AFP)}
+
+
 def _tipos_que_cumple(r, catalogo):
-    """El tipo del documento y, si es EPS o pensión con cubre="ambos", también el otro."""
+    """Los requisitos que cumple el documento.
+
+    En EPS, AFP y sus alias, los dice "cubre", no el tipo detectado: un certificado del
+    magisterio (FOMAG) detectado como pensión con cubre="ambos" cumple EPS y AFP. Sin
+    "cubre", cuenta el tipo detectado (ADR 0006).
+    """
     tipo = catalogo.resolver(r.tipo_detectado)
     if tipo is None:
         return []
-    tipos = [tipo]
-    if r.cubre == "ambos" and tipo.codigo in (EPS, AFP):
-        otro = catalogo.resolver(AFP if tipo.codigo == EPS else EPS)
-        if otro is not None:
-            tipos.append(otro)
-    return tipos
+    if tipo.codigo not in (EPS, AFP) or r.cubre not in COBERTURA:
+        return [tipo]
+    tipos = [catalogo.resolver(codigo) for codigo in COBERTURA[r.cubre]]
+    return [t for t in tipos if t is not None] or [tipo]
 
 
 @dataclass(frozen=True)
@@ -219,6 +282,7 @@ class EvaluacionProfesor:
     cedula_ambigua: bool
     pendientes: tuple = ()  # ResultadoDocumento aún sin analizar (ADR 0005)
     fechas_sin_leer: tuple = ()  # vencen, pero la fecha no se leyó: revisión humana
+    formatos_sin_cedula: tuple = ()  # formato sin la cédula del texto o de la firma
     por_vencer: tuple = ()  # vigentes que vencen en 7 días o menos
 
 
@@ -292,6 +356,7 @@ def evaluar_profesor(resultados, catalogo, *, cedula_confirmada=None, evidencia=
         cedula_ambigua=ambigua,
         pendientes=pendientes,
         fechas_sin_leer=tuple(r for r in analizados if r.fecha_sin_leer),
+        formatos_sin_cedula=tuple(r for r in analizados if r.formato_sin_cedula),
         # Un combinado es el vigente de EPS y de AFP: cuenta una vez.
         por_vencer=tuple(
             {id(r): r for r in vigentes.values() if r.por_vencer and r.es_valido}.values()
