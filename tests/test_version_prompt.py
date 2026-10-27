@@ -20,6 +20,7 @@ from tests.fixtures.datos import completo, documento
 # nueva (la que muestra el fallo).
 HUELLAS = {
     2: "3f7fef7b547f9cb6576634f6d734a2cbbc02fa0442294d015a8c5c9610e70840",
+    3: "249f0336764e14e03ce9a93e7a008870d63cb7b6199de0475911005d5845f6ec",
 }
 
 

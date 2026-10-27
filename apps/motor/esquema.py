@@ -32,8 +32,15 @@ _CAMPOS = {
     "cubre": (_COBERTURA, (str, type(None))),
     "tiene_logo_oficial": (_BOOLEANO_O_NULO, (bool, type(None))),
     "es_plantilla_institucional": (_BOOLEANO_O_NULO, (bool, type(None))),
+    # Formato de autorización: datos del cuerpo del texto y del bloque de firma, por
+    # separado. Los compara reglas.py, no el modelo; van en datos_extra (ADR 0006).
+    "nombre_texto": (_TEXTO_O_NULO, (str, type(None))),
+    "cedula_texto": (_TEXTO_O_NULO, (str, type(None))),
+    "nombre_firma": (_TEXTO_O_NULO, (str, type(None))),
+    "cedula_firma": (_TEXTO_O_NULO, (str, type(None))),
     "observaciones": (_TEXTO, (str,)),
 }
+CAMPOS_DEL_FORMATO = ("nombre_texto", "cedula_texto", "nombre_firma", "cedula_firma")
 
 
 def leer_fecha(texto):
@@ -111,6 +118,7 @@ def interpretar_entrada(entrada, catalogo, *, nombre_archivo, **metadatos):
         cubre=entrada["cubre"] or "",
         tiene_logo_oficial=entrada["tiene_logo_oficial"],
         es_plantilla_institucional=entrada["es_plantilla_institucional"],
+        datos_extra={c: entrada[c] for c in CAMPOS_DEL_FORMATO if entrada[c] is not None},
         observaciones=entrada["observaciones"],
         respuesta_cruda=dict(entrada),
         **metadatos,

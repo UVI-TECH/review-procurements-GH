@@ -61,6 +61,10 @@ def entrada(**cambios):
         "cubre": None,
         "tiene_logo_oficial": True,
         "es_plantilla_institucional": None,
+        "nombre_texto": None,
+        "cedula_texto": None,
+        "nombre_firma": None,
+        "cedula_firma": None,
         "observaciones": "",
         **cambios,
     }

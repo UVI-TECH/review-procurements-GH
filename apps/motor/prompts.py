@@ -13,8 +13,9 @@ from .esquema import NOMBRE_HERRAMIENTA, TIPO_OTRO
 # de los dos: cada Analisis la guarda, y la corrida "desactualizados" reanaliza los de una
 # versión anterior (ADR 0006). tests/test_motor_catalogo_esquema.py fija una huella por
 # versión para que un cambio sin subirla no pase desapercibido.
-# 1: motor migrado (ADR 0003). 2: requisitos 2026-2 (PR #11).
-VERSION_PROMPT = 2
+# 1: motor migrado (ADR 0003). 2: requisitos 2026-2 (PR #11). 3: régimen del magisterio
+# (FOMAG) y datos del texto y de la firma del formato de autorización.
+VERSION_PROMPT = 3
 
 # Pistas del legado (ESQUEMAS) para reconocer cada tipo; las que falten usan la etiqueta.
 PISTAS = {
@@ -31,22 +32,27 @@ PISTAS = {
         "Registro nacional de medidas correctivas."
     ),
     "formato_autorizacion_consulta_inhabilidades": (
-        "Formato de autorización para consulta de inhabilidades."
+        "Formato de autorización para la consulta de inhabilidades por delitos sexuales: "
+        "documento que el profesor diligencia y firma, dirigido a la UNIAJC, con el que la "
+        "autoriza a consultar (Ley 1918 de 2018, Decreto 753 de 2019). Suele empezar con "
+        '"El suscrito ... identificado con C.C. ...". NO es el resultado de la consulta.'
     ),
     "consulta_inhabilidades_delitos_sexuales": (
-        "Consulta de inhabilidades por delitos sexuales contra menores."
+        "Resultado de la consulta de inhabilidades por delitos sexuales contra menores, "
+        "generado por el sistema de la Policía Nacional. NO es el formato de autorización "
+        "firmado por el profesor."
     ),
     "certificado_registro_deudores_morosos": (
         "Registro de deudores morosos (REDAM). No trae nombre por diseño oficial: en "
         'nombre_persona escribe "No aplica - documento sin nombre por diseño oficial".'
     ),
     "certificado_eps": (
-        "Certificado de afiliación a una EPS (salud). Si el mismo documento certifica "
-        'también el fondo de pensiones, usa este código o certificado_afp con cubre="ambos".'
+        "Certificado de afiliación a salud: una EPS (Sanitas, Nueva EPS, SURA, Coomeva, "
+        "Compensar, Famisanar, Salud Total, entre otras) o la consulta de ADRES/BDUA."
     ),
     "certificado_afp": (
-        "Certificado de afiliación a un fondo de pensiones (AFP), como Colpensiones, "
-        "Porvenir, Protección o Colfondos."
+        "Certificado de afiliación a un fondo de pensiones: Colpensiones, Porvenir, "
+        "Protección, Colfondos o Skandia."
     ),
     "resolucion_pension_vejez": (
         "Certificado o resolución de pensión por vejez: el profesor ya es pensionado."
@@ -96,12 +102,26 @@ vigencia y el logo los evalúa Gestión Humana con los campos de abajo.
 AAAA-MM-DD. Si no aparece o no la puedes leer con certeza, null; no la inventes ni la \
 deduzcas del nombre del archivo.
 8. cubre: en certificados de EPS o de pensión (incluidas sus alternativas), qué \
-afiliaciones certifica el documento: "eps", "afp" o "ambos". null en los demás tipos.
+afiliaciones certifica el documento, según la entidad que lo expide:
+   - "eps" si es una entidad de salud: una EPS (Sanitas, Nueva EPS, SURA, Coomeva, \
+Compensar, Famisanar, Salud Total, entre otras) o un certificado de ADRES/BDUA.
+   - "afp" si es un fondo de pensiones (Colpensiones, Porvenir, Protección, Colfondos, \
+Skandia) o una alternativa de pensión.
+   - "ambos" si un mismo documento certifica salud y pensión, o si es un régimen especial \
+que cubre las dos: el Fondo Nacional de Prestaciones Sociales del Magisterio (FOMAG, \
+administrado por Fiduprevisora) cubre salud Y pensión.
+   null en los demás tipos.
 9. tiene_logo_oficial: true si se ve el logo de la entidad que expide el documento (como \
 sale al descargarlo con Control + P), false si no se ve, null si no puedes saberlo.
 10. es_plantilla_institucional: solo en el formato de autorización: true si es la \
 plantilla de la UNICAMACHO (con su título y su logo), false si no; null en los demás tipos.
-11. observaciones: una frase breve en español con lo que el revisor debe saber."""
+11. nombre_texto, cedula_texto, nombre_firma y cedula_firma: solo en el formato de \
+autorización. Extrae por separado el nombre y la cédula que aparecen en el cuerpo del texto \
+("El suscrito ... identificado con C.C. ...") y los del bloque de firma al final. Escríbelos \
+tal como aparecen, aunque no coincidan entre sí: no los compares ni decidas por ello la \
+validez. null si no aparecen o no se leen; null en los demás tipos. En el formato, \
+numero_documento es la cédula del bloque de firma.
+12. observaciones: una frase breve en español con lo que el revisor debe saber."""
 
 
 def _lista_de_tipos(catalogo):
