@@ -26,6 +26,10 @@ def entrada_valida(**cambios):
         "cubre": None,
         "tiene_logo_oficial": True,
         "es_plantilla_institucional": None,
+        "nombre_texto": None,
+        "cedula_texto": None,
+        "nombre_firma": None,
+        "cedula_firma": None,
         "observaciones": "Sin antecedentes",
         **cambios,
     }
@@ -218,3 +222,49 @@ def test_prompt_no_deja_la_vigencia_ni_el_logo_a_la_ia():
     assert "AAAA-MM-DD" in texto
     assert "- resolucion_pension_vejez:" in texto and "Cuenta como certificado_afp." in texto
     assert "- carta_bono_pensional:" in texto
+
+
+def test_datos_del_formato_van_en_datos_extra_sin_nulos():
+    resultado = interpretar_entrada(
+        entrada_valida(
+            tipo_detectado="formato_autorizacion_consulta_inhabilidades",
+            tiene_firma=True,
+            nombre_texto="Persona Ficticia",
+            cedula_texto="1.000.000.099",
+            cedula_firma="1000000001",
+        ),
+        catalogo_inicial(),
+        nombre_archivo="formato.pdf",
+    )
+    assert resultado.datos_extra == {
+        "nombre_texto": "Persona Ficticia",
+        "cedula_texto": "1.000.000.099",
+        "cedula_firma": "1000000001",
+    }
+
+
+def test_prompt_distingue_formato_de_consulta_y_explica_fomag():
+    texto = construir_system(catalogo_inicial())[0]["text"]
+    assert "Ley 1918 de 2018, Decreto 753 de 2019" in texto
+    assert "NO es el resultado de la consulta" in texto
+    assert "NO es el formato de autorización" in texto
+    assert "FOMAG" in texto and "Fiduprevisora" in texto and "cubre salud Y pensión" in texto
+    for entidad in ("Sanitas", "Nueva EPS", "ADRES", "Colpensiones", "Skandia"):
+        assert entidad in texto
+
+
+@pytest.mark.django_db
+def test_consulta_por_clave_de_datos_extra_en_sqlite(corrida, documento):
+    from apps.contrataciones.models import Analisis
+
+    Analisis.objects.create(
+        documento=documento,
+        corrida=corrida,
+        sha256=documento.sha256,
+        modelo="simulado",
+        tipo_detectado="formato_autorizacion_consulta_inhabilidades",
+        datos_extra={"cedula_texto": "1000000099", "cedula_firma": "1000000001"},
+    )
+    assert Analisis.objects.filter(datos_extra__cedula_texto="1000000099").count() == 1
+    assert not Analisis.objects.filter(datos_extra__cedula_texto="1000000001").exists()
+    assert Analisis.objects.filter(datos_extra__has_key="cedula_firma").count() == 1

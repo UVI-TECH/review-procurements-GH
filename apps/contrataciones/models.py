@@ -254,6 +254,8 @@ class Corrida(models.Model):
         TODOS = "todos", "Todos"
         NUEVOS_Y_MODIFICADOS = "nuevos_y_modificados", "Nuevos y modificados"
         UN_PROFESOR = "un_profesor", "Un profesor"
+        # Los analizados con una versión anterior del prompt (ADR 0006).
+        DESACTUALIZADOS = "desactualizados", "Desactualizados"
 
     class Estado(models.TextChoices):
         PENDIENTE = "pendiente", "Pendiente"
@@ -326,6 +328,8 @@ class Analisis(ModeloInmutable):
     # Hash del archivo analizado: dice si una revisión humana sigue aplicando (ADR 0002).
     sha256 = models.CharField(max_length=64, db_index=True)
     modelo = models.CharField(max_length=100)
+    # motor.prompts.VERSION_PROMPT con la que se analizó; nula: anterior a guardarla.
+    version_prompt = models.PositiveSmallIntegerField(null=True, blank=True)
     # Código normalizado tal como lo devolvió la IA; puede no estar en el catálogo.
     tipo_detectado = models.CharField(max_length=80, blank=True, db_index=True)
     es_valido = models.BooleanField(null=True)
@@ -425,6 +429,16 @@ class Revision(ModeloInmutable):
                 errores["tipo_corregido"] = "El tipo está retirado del catálogo."
         elif self.tipo_corregido_id is not None:
             errores["tipo_corregido"] = "El tipo corregido solo aplica al corregir."
+        # Un ilegible no se envió a la IA y el revisor tampoco puede leerlo: solo se rechaza
+        # (pedir otro archivo) o se descarta (ADR 0006).
+        if (
+            self.decision in (self.Decision.APROBADO, self.Decision.CORREGIDO)
+            and self.analisis_id is not None
+            and self.analisis.tipo_detectado == Analisis.TIPO_ILEGIBLE
+        ):
+            errores["decision"] = (
+                "Un documento ilegible solo se puede rechazar o descartar: nadie puede leerlo."
+            )
         if errores:
             raise ValidationError(errores)
 

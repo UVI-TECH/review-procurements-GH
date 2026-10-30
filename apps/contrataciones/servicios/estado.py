@@ -16,9 +16,10 @@ descartados; si un revisor confirmó la cédula, se compara contra ella.
 import hashlib
 from dataclasses import dataclass, replace
 
-from django.db.models import F, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
+from apps.motor.prompts import VERSION_PROMPT
 from apps.motor.reglas import (
     EstadoProfesor,
     aplicar_vigencia,
@@ -64,6 +65,9 @@ def resultado_de_analisis(analisis, documento):
         observaciones=analisis.observaciones,
         modificado_en=documento.modificado_en,
         modelo=analisis.modelo,
+        # Un ilegible lo decide el lector de PDF, no el prompt: nunca está desactualizado.
+        desactualizado=analisis.tipo_detectado != Analisis.TIPO_ILEGIBLE
+        and (analisis.version_prompt or 0) < VERSION_PROMPT,
     )
 
 
@@ -199,6 +203,7 @@ def recalcular_estado(profesor, catalogo):
         evaluacion.ilegibles
         or evaluacion.cedula_ambigua
         or evaluacion.fechas_sin_leer
+        or evaluacion.formatos_sin_cedula
         or any(e.documento.reintentos_agotados for e in evaluados)
     )
     profesor.save(
@@ -238,3 +243,28 @@ def recalcular_todos(catalogo):
     for profesor in profesores:
         recalcular_estado(profesor, catalogo)
     return profesores.count()
+
+
+def analisis_desactualizado():
+    """Condición sobre Documento: su análisis vigente es de una versión anterior del prompt.
+
+    Tiene un resultado útil (no error) para su sha256 actual, ninguno con la versión actual,
+    y no es ilegible (ese lo decide el lector de PDF, no el prompt). Un documento sin
+    análisis no está desactualizado: está pendiente (ADR 0005). Lo usan el tablero y la
+    corrida "desactualizados" (ADR 0006).
+    """
+    utiles = Analisis.objects.filter(documento=OuterRef("pk"), sha256=OuterRef("sha256")).exclude(
+        tipo_detectado=Analisis.TIPO_ERROR
+    )
+    return (
+        Exists(utiles)
+        & ~Exists(utiles.filter(version_prompt=VERSION_PROMPT))
+        & ~Exists(utiles.filter(tipo_detectado=Analisis.TIPO_ILEGIBLE))
+    )
+
+
+def documentos_desactualizados():
+    """Documentos presentes, de carpetas presentes, con el análisis desactualizado."""
+    return Documento.objects.filter(presente=True, profesor__carpeta_presente=True).filter(
+        analisis_desactualizado()
+    )

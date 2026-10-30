@@ -27,10 +27,15 @@ from apps.cuentas.auditoria import registrar
 from apps.cuentas.models import RegistroAuditoria
 from apps.motor.catalogo import cargar_catalogo
 from apps.motor.fuentes import ErrorFuente
-from apps.motor.reglas import solo_digitos
+from apps.motor.reglas import CAUSAS, solo_digitos
 
 from .models import Analisis, Documento, EstadoProfesor, Profesor, Revision, TipoDocumento
-from .servicios.estado import evaluar, filtrar_por_verificacion
+from .servicios.estado import (
+    analisis_desactualizado,
+    documentos_desactualizados,
+    evaluar,
+    filtrar_por_verificacion,
+)
 from .servicios.revisiones import (
     cedula_que_no_coincide,
     confirmar_cedula,
@@ -96,6 +101,7 @@ def tablero(request):
         "verificacion": request.GET.get("verificacion", ""),
         "atencion": request.GET.get("atencion") == "1",
         "pendientes": request.GET.get("pendientes") == "1",
+        "desactualizados": request.GET.get("desactualizados") == "1",
         "ocultos": request.GET.get("ocultos") == "1",
     }
 
@@ -115,6 +121,14 @@ def tablero(request):
         profesores = profesores.filter(requiere_atencion=True)
     if filtros["pendientes"]:
         profesores = profesores.filter(Exists(_pendientes_de_analisis()))
+    if filtros["desactualizados"]:
+        profesores = profesores.filter(
+            Exists(
+                Documento.objects.filter(profesor=OuterRef("pk"), presente=True).filter(
+                    analisis_desactualizado()
+                )
+            )
+        )
     if filtros["q"]:
         busqueda = Q(nombre__icontains=filtros["q"]) | Q(carpeta__icontains=filtros["q"])
         if ve_datos_personales and solo_digitos(filtros["q"]):
@@ -152,6 +166,8 @@ def tablero(request):
         "verificaciones": Profesor.Verificacion.choices,
         "sin_pagina": sin_pagina,
         "puede_ver_detalle": ve_datos_personales,
+        # Aviso global para Administrador y Revisor (ADR 0006); no marca "requiere atención".
+        "total_desactualizados": documentos_desactualizados().count() if ve_datos_personales else 0,
         "ve_cedulas": ve_datos_personales,
     }
     return _responder(
@@ -163,6 +179,13 @@ def tablero(request):
 
 
 COBERTURA = {"eps": "EPS", "afp": "Pensión", "ambos": "EPS y pensión"}
+
+
+def _motivo_ilegible(analisis):
+    """«PDF protegido con contraseña: solicitar …» -> «PDF protegido con contraseña»."""
+    if analisis is None:
+        return ""
+    return analisis.observaciones.split(": solicitar")[0].strip().rstrip(".")
 
 
 def _nombre_de_tipo(catalogo, codigo):
@@ -214,12 +237,20 @@ def detalle(request, pk):
                 "cedula_ajena": cedula_que_no_coincide(e, evaluacion.cedula or ""),
                 # Vigencia y lo que solo se observa (ADR 0006).
                 "vencido": e.resultado_ia.vencido,
+                # Lo que dijo la IA frente al resultado final y sus causas (ADR 0006).
+                "ia_valido": bool(e.analisis and e.analisis.es_valido),
+                "causas": [CAUSAS[c] for c in e.resultado_ia.causas],
+                "formato_sin_cedula": e.resultado_ia.formato_sin_cedula,
+                # No se envió a la IA (contraseña, dañado, límites): solo rechazar o descartar.
+                "ilegible": tipo_ia == Analisis.TIPO_ILEGIBLE,
+                "motivo_ilegible": _motivo_ilegible(e.analisis),
                 "por_vencer": e.resultado_ia.por_vencer
                 and bool(e.resultado)
                 and e.resultado.es_valido,
                 "fecha_sin_leer": e.resultado_ia.fecha_sin_leer,
                 "cubre": COBERTURA.get(e.resultado_ia.cubre, ""),
                 "observacion_alias": catalogo.observacion_de(tipo_ia),
+                "desactualizado": e.resultado_ia.desactualizado,
             }
         )
 

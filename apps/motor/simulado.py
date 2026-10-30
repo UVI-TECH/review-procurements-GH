@@ -12,6 +12,9 @@ Convenciones (sobre el nombre normalizado, sin .pdf):
   "vencido", hace 45; "por_vencer", hace 25; "fecha_ilegible", sin fecha (ADR 0006).
 - EPS, AFP y las alternativas de pensión reportan qué cubren; "combinado" cubre los dos.
 - "sin_logo": no se ve el logo de la entidad.
+- "fomag": régimen especial del magisterio, cubre salud y pensión ("ambos").
+- En el formato: "formato_otra_persona" (el texto, de otra persona) y
+  "formato_sin_diligenciar" (sin cédula en el texto).
 """
 
 import re
@@ -56,6 +59,24 @@ class ClienteSimulado(ClienteBase):
             entrada, self.catalogo, nombre_archivo=nombre_archivo, **metadatos
         )
 
+    @staticmethod
+    def _formato(exige_firma, cedula, nombre):
+        """Texto y firma del formato. "formato_otra_persona": el texto, de otra persona;
+        "formato_sin_diligenciar": sin cédula en el texto."""
+        if not exige_firma:
+            return dict.fromkeys(("nombre_texto", "cedula_texto", "nombre_firma", "cedula_firma"))
+        cedula_texto = cedula
+        if "formato_otra_persona" in nombre:
+            cedula_texto = CEDULA_OTRA_PERSONA
+        elif "formato_sin_diligenciar" in nombre:
+            cedula_texto = None
+        return {
+            "nombre_texto": "Persona Ficticia" if cedula_texto == CEDULA_OTRA_PERSONA else "",
+            "cedula_texto": cedula_texto,
+            "nombre_firma": "",
+            "cedula_firma": cedula,
+        }
+
     def _respuesta(self, nombre):
         codigo = next((c for c in self._codigos if c in nombre), TIPO_OTRO)
         tipo = self.catalogo.resolver(codigo)
@@ -74,7 +95,7 @@ class ClienteSimulado(ClienteBase):
             codigo == TIPO_OTRO or sin_firma or "invalido" in nombre or "otra_persona" in nombre
         )
         cubre = COBERTURA.get(tipo.codigo) if tipo else None
-        if cubre and "combinado" in nombre:
+        if cubre and ("combinado" in nombre or "fomag" in nombre):
             cubre = "ambos"
         dias = 45 if "vencido" in nombre else 25 if "por_vencer" in nombre else 3
         expedicion = None if "fecha_ilegible" in nombre else timezone.localdate() - timedelta(dias)
@@ -88,5 +109,6 @@ class ClienteSimulado(ClienteBase):
             "cubre": cubre,
             "tiene_logo_oficial": "sin_logo" not in nombre,
             "es_plantilla_institucional": True if exige_firma else None,
+            **self._formato(exige_firma, cedula, nombre),
             "observaciones": "Respuesta simulada.",
         }

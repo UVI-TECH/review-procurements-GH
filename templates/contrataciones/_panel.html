@@ -3,9 +3,11 @@
   <h2 id="titulo-panel">{{ e.documento.nombre_archivo }}</h2>
 
   <dl class="datos datos-documento">
-    <div><dt>La IA dice</dt><dd>{% if elegido.pendiente %}<span class="insignia semaforo-pendiente"><span aria-hidden="true">⏳</span> Pendiente de análisis</span> Se analizará en la próxima corrida.{% else %}{{ elegido.tipo_ia }} · {% if e.resultado_ia.es_valido %}válido{% elif e.resultado_ia.es_error %}error{% else %}inválido{% endif %}{% endif %}</dd></div>
+    {# Lo que dijo la IA, sin las reglas, frente al resultado final: base del control de calidad (ADR 0006). #}
+    <div><dt>La IA dijo</dt><dd>{% if elegido.pendiente %}<span class="insignia semaforo-pendiente"><span aria-hidden="true">⏳</span> Pendiente de análisis</span> Se analizará en la próxima corrida.{% elif elegido.ilegible %}No se envió a la IA: {{ elegido.motivo_ilegible }}{% elif e.resultado_ia.es_error %}{{ elegido.tipo_ia }} · error{% else %}{{ elegido.tipo_ia }} · {% if elegido.ia_valido %}válido{% else %}inválido{% endif %}{% endif %}</dd></div>
+    {% if not elegido.pendiente %}<div><dt>Resultado final</dt><dd>{% if elegido.valido is None %}No cuenta: descartado por el revisor{% else %}{% if elegido.valido %}válido{% else %}inválido{% endif %}{% if e.revision %} · por revisión humana ({{ e.revision.get_decision_display|lower }}){% elif elegido.ilegible %} · archivo ilegible: hay que pedir uno nuevo{% elif elegido.causas %} · {{ elegido.causas|join:"; " }}{% else %} · como dijo la IA{% endif %}{% endif %}</dd></div>{% endif %}
     {% if elegido.cubre %}<div><dt>Cubre</dt><dd>{{ elegido.cubre }}</dd></div>{% endif %}
-    {% if e.analisis and not elegido.pendiente and not e.resultado_ia.es_error %}<div><dt>Fecha de expedición</dt><dd>{% if e.analisis.fecha_expedicion %}{{ e.analisis.fecha_expedicion|date:"d/m/Y" }}{% if e.resultado_ia.vence_el %} · {% if elegido.vencido %}venció{% else %}vence{% endif %} el {{ e.resultado_ia.vence_el|date:"d/m/Y" }}{% endif %}{% else %}No se pudo leer{% endif %}</dd></div>
+    {% if e.analisis and not elegido.pendiente and not e.resultado_ia.es_error %}<div><dt>Fecha de expedición</dt><dd>{% if e.analisis.fecha_expedicion %}{{ e.analisis.fecha_expedicion|date:"d/m/Y" }}{% if e.resultado_ia.vence_el %} · {% if elegido.vencido %}venció{% else %}vence{% endif %} el {{ e.resultado_ia.vence_el|date:"d/m/Y" }}{% endif %}{% elif elegido.desactualizado %}Sin dato (prompt anterior){% else %}No se pudo leer{% endif %}</dd></div>
     <div><dt>Logo de la entidad</dt><dd>{% if e.analisis.tiene_logo_oficial is True %}Sí{% elif e.analisis.tiene_logo_oficial is False %}No se ve{% else %}No se sabe{% endif %}{% if e.analisis.es_plantilla_institucional is not None %} · Plantilla de la UNICAMACHO: {% if e.analisis.es_plantilla_institucional %}sí{% else %}no{% endif %}{% endif %} <span class="nota">(solo se observa; no cambia la validez)</span></dd></div>{% endif %}
     {% if e.analisis.numero_documento %}<div><dt>Cédula en el documento</dt><dd class="cedula">{{ e.analisis.numero_documento }}</dd></div>{% endif %}
     {% if e.analisis.nombre_persona %}<div><dt>Nombre en el documento</dt><dd>{{ e.analisis.nombre_persona }}</dd></div>{% endif %}
@@ -17,13 +19,19 @@
     </dd></div>
   </dl>
 
+  {% if elegido.desactualizado %}<p class="aviso aviso-desactualizado">Analizado con un prompt anterior: requiere reanálisis.</p>{% endif %}
   {% if elegido.observacion_alias %}<p class="aviso">{{ elegido.observacion_alias }}</p>{% endif %}
   {% if elegido.vencido %}<p class="aviso aviso-fuerte">Certificado vencido: venció el {{ e.resultado_ia.vence_el|date:"d/m/Y" }}. Pide uno nuevo.</p>
   {% elif elegido.por_vencer %}<p class="aviso">Vence el {{ e.resultado_ia.vence_el|date:"d/m" }}: pide uno nuevo antes de esa fecha.</p>
   {% elif elegido.fecha_sin_leer %}<p class="aviso">No se pudo leer la fecha de expedición: revisa la vigencia en el PDF.</p>{% endif %}
 
   {% if puede_ver_pdf %}
+    {% if elegido.ilegible %}
+      {# Sin iframe: el navegador pediría la contraseña o mostraría un error dentro del panel. #}
+      <p class="aviso">Este PDF no se puede mostrar aquí ({{ elegido.motivo_ilegible|lower }}). Ábrelo en otra pestaña si necesitas verlo.</p>
+    {% else %}
     <iframe class="visor" src="{% url 'pdf' e.documento.pk %}" title="PDF: {{ e.documento.nombre_archivo }}"></iframe>
+    {% endif %}
     <p class="nota"><a href="{% url 'pdf' e.documento.pk %}" target="_blank" rel="noopener">Abrir el PDF en otra pestaña</a></p>
   {% endif %}
 
@@ -36,14 +44,20 @@
         <label class="opcion"><input type="radio" name="decision" value="aprobado" required> Aprobar <span class="nota">(válido con el tipo que dice la IA)</span></label>
       {% endif %}
       <label class="opcion"><input type="radio" name="decision" value="rechazado" required> Rechazar <span class="nota">(no sirve)</span></label>
-      <label class="opcion"><input type="radio" name="decision" value="corregido" required> Corregir el tipo <span class="nota">(es válido, pero de otro tipo)</span></label>
+      {% if not elegido.ilegible %}
+        <label class="opcion"><input type="radio" name="decision" value="corregido" required> Corregir el tipo <span class="nota">(es válido, pero de otro tipo)</span></label>
+      {% endif %}
       <label class="opcion"><input type="radio" name="decision" value="descartado" required> Descartar <span class="nota">(no cuenta para nada: duplicado, irrelevante)</span></label>
     </fieldset>
+    {% if elegido.ilegible %}
+      <p class="nota">Un documento ilegible solo se puede rechazar (pedir otro archivo) o descartar.</p>
+    {% else %}
     <label for="tipo_corregido">Tipo correcto (solo al corregir)</label>
     <select id="tipo_corregido" name="tipo_corregido">
       <option value="">—</option>
       {% for tipo in tipos_activos %}<option value="{{ tipo.pk }}">{{ tipo.etiqueta }}</option>{% endfor %}
     </select>
+    {% endif %}
     {% if elegido.cedula_ajena %}
       <p class="aviso aviso-fuerte" id="aviso-cedula">La cédula del documento (<span class="cedula">{{ elegido.cedula_ajena }}</span>) no coincide con la del profesor (<span class="cedula">{{ evaluacion.cedula }}</span>). Para aprobarlo o corregirlo, explica por qué en el comentario.</p>
     {% endif %}

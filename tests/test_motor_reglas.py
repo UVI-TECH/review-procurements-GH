@@ -32,6 +32,10 @@ def doc(tipo, valido=True, cedula=CEDULA, *, archivo=None, firma=None, minutos=0
         tiene_firma=firma,
         error=error,
         modificado_en=BASE + timedelta(minutes=minutos),
+        # Formato diligenciado con los datos del profesor (texto y firma).
+        datos_extra={"cedula_texto": cedula, "cedula_firma": cedula}
+        if tipo == FORMATO and cedula
+        else {},
     )
 
 
@@ -155,7 +159,11 @@ def test_dotc_cuenta_como_certificado_medico():
 def test_sin_ninguna_cedula_no_se_revalida():
     docs = [doc(codigo, valido=False, cedula="") for codigo in CODIGOS]
     revalidados, evaluacion = procesar(docs)
-    assert revalidados == docs
+    otros = [(r, d) for r, d in zip(revalidados, docs, strict=True) if d.tipo_detectado != FORMATO]
+    assert all(r == d for r, d in otros)
+    # El formato sin cédulas no cambia de validez, pero queda señalado (ADR 0006).
+    formato = revalidados[CODIGOS.index(FORMATO)]
+    assert formato.formato_sin_cedula and formato.es_valido is False
     assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
 
 

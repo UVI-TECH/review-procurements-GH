@@ -638,6 +638,13 @@ legend {
 }
 
 /* Después de .insignia y .etiqueta, para que el color no se pierda. */
+.etiqueta-desactualizado,
+.aviso-desactualizado {
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-fondo);
+}
+
 .semaforo-pendiente,
 .etiqueta-pendiente,
 .estado-pendiente_analisis {

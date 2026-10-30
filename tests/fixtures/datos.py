@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from apps.contrataciones.models import Analisis, Documento
+from apps.motor.prompts import VERSION_PROMPT
 from tests.fixtures.catalogo import AFP, CODIGOS, EPS, FORMATO
 
 CEDULA = "1000000001"
@@ -21,8 +22,13 @@ def documento(
     sha=None,
     dias=3,
     cubre=None,
+    version=VERSION_PROMPT,
+    formato=None,
 ):
-    """dias: hace cuántos días se expidió (None: fecha que la IA no leyó)."""
+    """dias: hace cuántos días se expidió (None: fecha que la IA no leyó).
+    version: la del prompt con que se analizó (None: anterior a guardarla).
+    formato: datos_extra del formato de autorización; por defecto, texto y firma con la
+    misma cédula del documento."""
     nombre = nombre or f"{tipo or 'x'}.pdf"
     doc = Documento.objects.create(
         profesor=profesor,
@@ -37,10 +43,16 @@ def documento(
         corrida=corrida,
         sha256=doc.sha256,
         modelo="simulado",
+        version_prompt=version,
         tipo_detectado=tipo,
         es_valido=valido,
         numero_documento=cedula,
         tiene_firma=True if tipo == FORMATO else None,
+        datos_extra=(
+            {"cedula_texto": cedula, "cedula_firma": cedula} if formato is None else formato
+        )
+        if tipo == FORMATO
+        else {},
         fecha_expedicion=None if dias is None else timezone.localdate() - timedelta(days=dias),
         cubre=cubre if cubre is not None else {EPS: "eps", AFP: "afp"}.get(tipo, ""),
         observaciones="Error simulado." if tipo == Analisis.TIPO_ERROR else "",

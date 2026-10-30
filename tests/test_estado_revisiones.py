@@ -10,6 +10,7 @@ from apps.contrataciones.models import (
     EstadoProfesor,
     Profesor,
     Revision,
+    TipoDocumento,
 )
 from apps.contrataciones.servicios.estado import (
     actualizar_huella,
@@ -455,3 +456,42 @@ def test_recalcular_todos_salta_las_carpetas_desaparecidas(prof, corrida, catalo
     assert recalcular_todos(catalogo) == 0
     prof.refresh_from_db()
     assert prof.estado == EstadoProfesor.COMPLETO  # conserva su último estado (ADR 0004)
+
+
+def test_formato_sin_diligenciar_requiere_atencion(prof, corrida, catalogo):
+    completo(
+        prof,
+        corrida,
+        formato_autorizacion_consulta_inhabilidades={"formato": {"cedula_firma": CEDULA}},
+    )
+    assert estado(prof, catalogo) == EstadoProfesor.COMPLETO
+    assert prof.requiere_atencion
+
+
+def test_formato_a_nombre_de_otra_persona_queda_con_problemas(prof, corrida, catalogo):
+    datos = {"cedula_texto": OTRA, "cedula_firma": CEDULA}
+    completo(prof, corrida, formato_autorizacion_consulta_inhabilidades={"formato": datos})
+    assert estado(prof, catalogo) == EstadoProfesor.CON_PROBLEMAS
+
+
+@pytest.mark.parametrize(
+    ("decision", "tipo"), [("aprobado", None), ("corregido", "certificado_afp")]
+)
+def test_un_ilegible_solo_se_rechaza_o_se_descarta_en_el_modelo(
+    prof, corrida, revisor, decision, tipo
+):
+    roto = documento(prof, corrida, Analisis.TIPO_ILEGIBLE, valido=False, nombre="roto.pdf")
+    analisis = roto.analisis.get()
+    revision = Revision(
+        analisis=analisis,
+        usuario=revisor,
+        decision=decision,
+        comentario="Lo leí igual.",
+        tipo_corregido=TipoDocumento.objects.get(codigo=tipo) if tipo else None,
+    )
+    with pytest.raises(ValidationError, match="solo se puede rechazar o descartar"):
+        revision.save()
+    for permitida in ("rechazado", "descartado"):
+        Revision(
+            analisis=analisis, usuario=revisor, decision=permitida, comentario="Pedir otro."
+        ).save()

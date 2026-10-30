@@ -126,7 +126,7 @@ def _mismo_tipo(viejo, nuevo):
     return viejo == TIPO_LEGADO_SEGURIDAD_SOCIAL and nuevo in CODIGOS_SEGURIDAD_SOCIAL
 
 
-def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
+def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado, faltantes_legado):
     motivos = []
     if evaluacion.cedula_ambigua:
         motivos.append("cedula_ambigua")
@@ -149,8 +149,14 @@ def _motivos_intencionales(evaluacion, documentos, catalogo, estado_legado):
         motivos.append("pendiente_de_analisis")
     # Requisitos de Gestión Humana 2026-2 (ADR 0006): el legado tenía un solo tipo de
     # seguridad social, no evaluaba la vigencia y no conocía las alternativas de pensión.
-    # Falta solo uno de los dos: el otro está, y al legado le bastaba con ese documento.
-    if len({t.codigo for t in evaluacion.faltantes} & {EPS, AFP}) == 1:
+    # Falta uno de los dos (al legado le bastaba un documento), o faltan los dos donde al
+    # legado le faltaba su tipo único: es el mismo requisito contado como dos.
+    faltan = {t.codigo for t in evaluacion.faltantes} & {EPS, AFP}
+    if len(faltan) == 1 or (
+        faltan == {EPS, AFP}
+        and TIPO_LEGADO_SEGURIDAD_SOCIAL in faltantes_legado
+        and evaluacion.estado != EstadoProfesor.SIN_DOCUMENTOS
+    ):
         motivos.append("separacion_eps_afp")
     if any(d.vencido or d.fecha_sin_leer for d in documentos):
         motivos.append("vigencia")
@@ -206,7 +212,7 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
     # También cuando la diferencia viene de la IA: el prompt nuevo reconoce documentos que
     # el legado no conocía (p. ej. las alternativas de pensión, ADR 0006).
     motivos = (
-        _motivos_intencionales(evaluacion, revalidados, catalogo, col2["estado"])
+        _motivos_intencionales(evaluacion, revalidados, catalogo, col2["estado"], col2["faltantes"])
         if difieren_reglas or col1["estado"] != col3["estado"]
         else []
     )
@@ -249,6 +255,12 @@ def comparar_profesor(profesor, dicts_legado, resultados_nuevos, catalogo, legad
         "origen_diferencia_estado": "_y_".join(origen) or None,
         "diferencias_intencionales": motivos,
         "diferencias_no_explicadas": (["reglas"] if difieren_reglas and not motivos else []),
+        # Aparte del estado: si no, quedan escondidos detrás de otras etiquetas.
+        "documentos_tipo_distinto": [
+            {"archivo": d["archivo"], "legado": d["legado"]["tipo"], "nuevo": d["nuevo"]["tipo"]}
+            for d in documentos
+            if not d["coincide_tipo"]
+        ],
         "documentos": documentos,
     }
 
@@ -289,5 +301,11 @@ def resumir(informes):
         "documentos": len(documentos),
         "logo_por_tipo": logo_por_tipo(documentos),
         "documentos_tipo_coincide": sum(d["coincide_tipo"] for d in documentos),
+        # Discrepancias de tipo entre la IA nueva y el legado, también cuando el estado del
+        # profesor coincide (esas quedaban escondidas).
+        "documentos_tipo_distinto": sum(len(i["documentos_tipo_distinto"]) for i in informes),
+        "documentos_tipo_distinto_con_estado_igual": sum(
+            len(i["documentos_tipo_distinto"]) for i in informes if i["coincide_estado_detallado"]
+        ),
         "documentos_es_valido_coincide": sum(d["coincide_es_valido"] for d in documentos),
     }

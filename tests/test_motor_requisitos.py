@@ -31,8 +31,13 @@ CEDULA = "1000000001"
 HOY = date(2026, 10, 24)
 
 
-def doc(tipo, *, dias=3, valido=True, cedula=CEDULA, archivo=None, cubre="", firma=None):
-    """dias: hace cuántos días se expidió (None: la IA no pudo leer la fecha)."""
+def doc(
+    tipo, *, dias=3, valido=True, cedula=CEDULA, archivo=None, cubre="", firma=None, formato=None
+):
+    """dias: hace cuántos días se expidió (None: la IA no pudo leer la fecha).
+    formato: datos_extra del formato; por defecto, texto y firma con la cédula del doc."""
+    if tipo == FORMATO and formato is None:
+        formato = {"cedula_texto": cedula, "cedula_firma": cedula}
     return ResultadoDocumento(
         nombre_archivo=archivo or f"{tipo}.pdf",
         tipo_detectado=tipo,
@@ -41,6 +46,7 @@ def doc(tipo, *, dias=3, valido=True, cedula=CEDULA, archivo=None, cubre="", fir
         tiene_firma=True if tipo == FORMATO else firma,
         fecha_expedicion=None if dias is None else HOY - timedelta(days=dias),
         cubre=cubre,
+        datos_extra=formato or {},
     )
 
 
@@ -202,3 +208,116 @@ def test_un_vencido_validado_por_revisor_cuenta_como_valido():
     _, evaluacion = procesar(completos(**{EPS: None}) + [aprobado])
     # procesar vuelve a aplicar la vigencia: la decisión humana prevalece.
     assert evaluacion.estado == EstadoProfesor.COMPLETO
+
+
+# --- Cobertura según "cubre": régimen del magisterio (FOMAG) ---
+
+OTRA = "1000000099"
+
+
+def test_fomag_detectado_como_pension_cumple_eps_y_afp():
+    fomag = doc(AFP, archivo="fomag.pdf", cubre="ambos")
+    _, evaluacion = procesar([*completos(**{EPS: None, AFP: None}), fomag])
+    assert evaluacion.estado == EstadoProfesor.COMPLETO
+    assert evaluacion.vigentes[EPS].nombre_archivo == "fomag.pdf"
+    assert evaluacion.vigentes[AFP].nombre_archivo == "fomag.pdf"
+
+
+def test_cubre_manda_sobre_el_tipo_detectado():
+    # Detectado como AFP, pero certifica salud: cumple EPS y no AFP.
+    salud = doc(AFP, archivo="salud.pdf", cubre="eps")
+    _, evaluacion = procesar([*completos(**{EPS: None, AFP: None}), salud])
+    assert evaluacion.vigentes[EPS].nombre_archivo == "salud.pdf"
+    assert [t.codigo for t in evaluacion.faltantes] == [AFP]
+
+
+def test_sin_cubre_cuenta_el_tipo_detectado():
+    _, evaluacion = procesar([*completos(**{EPS: None}), doc(EPS, archivo="eps.pdf")])
+    assert evaluacion.vigentes[EPS].nombre_archivo == "eps.pdf"
+
+
+# --- Formato de autorización con datos de otra persona ---
+
+
+def _formato(revalidados):
+    return revalidados[CODIGOS.index(FORMATO)]
+
+
+def test_formato_con_el_texto_de_otra_persona_es_invalido():
+    ajeno = doc(FORMATO, formato={"cedula_texto": "1.000.000.099", "cedula_firma": CEDULA})
+    revalidados, evaluacion = procesar(completos(**{FORMATO: ajeno}))
+    formato = _formato(revalidados)
+    assert not formato.es_valido
+    assert formato.causas == ("formato_otra_persona",)
+    assert formato.observaciones.startswith(
+        "El texto del formato autoriza a nombre de otra persona (C.C. distinta): debe "
+        "diligenciarse con sus propios datos."
+    )
+    assert evaluacion.estado == EstadoProfesor.CON_PROBLEMAS
+
+
+def test_formato_de_otra_persona_aunque_texto_y_firma_coincidan():
+    ajeno = doc(FORMATO, cedula=OTRA)  # texto y firma de otra persona
+    revalidados, _ = procesar(completos(**{FORMATO: ajeno}))
+    formato = _formato(revalidados)
+    assert not formato.es_valido and "formato_otra_persona" in formato.causas
+
+
+def test_formato_contra_la_cedula_confirmada():
+    catalogo = catalogo_inicial()
+    ajeno = doc(FORMATO, formato={"cedula_texto": OTRA, "cedula_firma": OTRA}, cedula=OTRA)
+    docs = completos(**{FORMATO: ajeno})
+    revalidados = revalidar_por_cedula(docs, catalogo, cedula_confirmada=CEDULA)
+    assert "formato_otra_persona" in _formato(revalidados).causas
+
+
+@pytest.mark.parametrize("faltante", ["cedula_texto", "cedula_firma"])
+def test_formato_sin_cedula_no_invalida_pero_queda_senalado(faltante):
+    datos = {"cedula_texto": CEDULA, "cedula_firma": CEDULA}
+    del datos[faltante]
+    revalidados, evaluacion = procesar(completos(**{FORMATO: doc(FORMATO, formato=datos)}))
+    formato = _formato(revalidados)
+    assert formato.es_valido and formato.formato_sin_cedula and formato.causas == ()
+    assert formato.observaciones.startswith(
+        "No se pudo leer la cédula del texto o de la firma del formato: revisar."
+    )
+    assert evaluacion.estado == EstadoProfesor.COMPLETO
+    assert evaluacion.formatos_sin_cedula == (formato,)
+
+
+def test_formato_de_un_prompt_anterior_no_se_revisa():
+    viejo = replace(doc(FORMATO, formato={}), desactualizado=True)
+    revalidados, _ = procesar(completos(**{FORMATO: viejo}))
+    assert not _formato(revalidados).formato_sin_cedula
+
+
+# --- Causas: lo que cambió la validez que dio la IA ---
+
+
+def test_causas_de_vigencia_y_de_cedula():
+    vencido = doc(EPS, dias=45, cubre="eps")
+    ajeno = doc("certificado_antecedentes_judiciales", cedula=OTRA)
+    rescatado = doc("boletin_responsabilidades_fiscales", valido=False)
+    revalidados, _ = procesar(
+        completos(
+            **{
+                EPS: vencido,
+                "certificado_antecedentes_judiciales": ajeno,
+                "boletin_responsabilidades_fiscales": rescatado,
+            }
+        )
+    )
+    por_tipo = {r.tipo_detectado: r for r in revalidados}
+    assert por_tipo[EPS].causas == ("vigencia",)
+    assert por_tipo["certificado_antecedentes_judiciales"].causas == ("cedula_ajena",)
+    assert por_tipo["boletin_responsabilidades_fiscales"].causas == ("cedula_coincide",)
+    assert por_tipo[AFP].causas == ()
+
+
+def test_la_cedula_de_la_firma_no_rescata_un_formato_ajeno():
+    # La IA lo marcó inválido; la firma es la del profesor, pero el texto es de otra persona.
+    ajeno = doc(
+        FORMATO, valido=False, firma=True, formato={"cedula_texto": OTRA, "cedula_firma": CEDULA}
+    )
+    revalidados, _ = procesar(completos(**{FORMATO: ajeno}))
+    assert not _formato(revalidados).es_valido

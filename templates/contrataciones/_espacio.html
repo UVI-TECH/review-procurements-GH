@@ -21,6 +21,8 @@
           {% endif %}
           {% if d.por_vencer %}<span class="etiqueta etiqueta-atencion">Vence el {{ e.resultado_ia.vence_el|date:"d/m" }}</span>{% endif %}
           {% if d.fecha_sin_leer %}<span class="etiqueta etiqueta-atencion">Fecha sin leer</span>{% endif %}
+          {% if d.formato_sin_cedula %}<span class="etiqueta etiqueta-atencion">Formato sin cédula</span>{% endif %}
+          {% if d.desactualizado %}<span class="etiqueta etiqueta-desactualizado">Prompt anterior</span>{% endif %}
           {% if d.observacion_alias %}<span class="etiqueta">Declaración del profesor</span>{% endif %}
           {% if e.revision %}<span class="etiqueta">Revisado: {{ e.revision.get_decision_display|lower }}</span>{% endif %}
           {% if e.documento.reintentos_agotados %}<span class="etiqueta etiqueta-atencion">Reintentos agotados</span>{% endif %}
