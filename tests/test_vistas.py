@@ -217,13 +217,26 @@ def test_revision_invalida_muestra_el_error_y_no_guarda(client, revisor, datos):
 
 def test_corregir_el_tipo(client, revisor, datos):
     beto = datos["beto"]
-    roto = beto.documentos.get(nombre_archivo="roto.pdf")
-    eps = TipoDocumento.objects.get(codigo="certificado_afp")
+    eps = beto.documentos.get(nombre_archivo="certificado_eps.pdf")
+    afp = TipoDocumento.objects.get(codigo="certificado_afp")
     entrar(client, revisor).post(
-        reverse("revisar", args=[beto.pk, roto.pk]),
-        {"decision": "corregido", "comentario": "Es la EPS", "tipo_corregido": eps.pk},
+        reverse("revisar", args=[beto.pk, eps.pk]),
+        {"decision": "corregido", "comentario": "Es la pensión", "tipo_corregido": afp.pk},
     )
-    assert Revision.objects.get().tipo_corregido == eps
+    assert Revision.objects.get().tipo_corregido == afp
+
+
+def test_corregir_el_tipo_de_un_ilegible_se_rechaza(client, revisor, datos):
+    beto = datos["beto"]
+    roto = beto.documentos.get(nombre_archivo="roto.pdf")
+    afp = TipoDocumento.objects.get(codigo="certificado_afp")
+    respuesta = entrar(client, revisor).post(
+        reverse("revisar", args=[beto.pk, roto.pk]),
+        {"decision": "corregido", "comentario": "Es la AFP", "tipo_corregido": afp.pk},
+        follow=True,
+    )
+    assert not Revision.objects.exists()
+    assert "solo se puede rechazar o descartar" in respuesta.content.decode()
 
 
 def test_documento_de_otro_profesor_da_404(client, revisor, datos):
@@ -794,3 +807,36 @@ def test_formato_sin_cedula_en_la_lista(client, revisor, ciro, corrida):
     html = _detalle(client, revisor, ciro, docs[formato]).content.decode()
     assert "Formato sin cédula" in _enlace(html, docs[formato])
     assert "No se pudo leer la cédula del texto o de la firma del formato: revisar" in html
+
+
+# --- Documento ilegible (ADR 0006) ---
+
+
+def test_ilegible_no_se_envio_a_la_ia_y_sin_iframe(client, revisor, ciro, corrida):
+    roto = Documento.objects.create(
+        profesor=ciro,
+        ruta_relativa="DEMO CIRO/protegido.pdf",
+        nombre_archivo="protegido.pdf",
+        sha256="c" * 64,
+        tamano=10,
+        modificado_en=corrida.creada_en,
+    )
+    Analisis.objects.create(
+        documento=roto,
+        corrida=corrida,
+        sha256=roto.sha256,
+        modelo="",
+        tipo_detectado=Analisis.TIPO_ILEGIBLE,
+        es_valido=False,
+        observaciones="PDF protegido con contraseña: solicitar un nuevo archivo sin contraseña.",
+    )
+    html = _detalle(client, revisor, ciro, roto).content.decode()
+    panel = _panel(html)
+    assert "<dt>La IA dijo</dt><dd>No se envió a la IA: PDF protegido con contraseña</dd>" in panel
+    assert "inválido · archivo ilegible: hay que pedir uno nuevo" in panel
+    assert "<iframe" not in panel
+    assert "Este PDF no se puede mostrar aquí (pdf protegido con contraseña)" in panel
+    assert reverse("pdf", args=[roto.pk]) in panel  # el enlace a otra pestaña sigue
+    assert 'value="rechazado"' in panel and 'value="descartado"' in panel
+    assert 'value="corregido"' not in panel and 'value="aprobado"' not in panel
+    assert 'id="tipo_corregido"' not in panel

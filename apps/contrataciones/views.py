@@ -181,6 +181,13 @@ def tablero(request):
 COBERTURA = {"eps": "EPS", "afp": "Pensión", "ambos": "EPS y pensión"}
 
 
+def _motivo_ilegible(analisis):
+    """«PDF protegido con contraseña: solicitar …» -> «PDF protegido con contraseña»."""
+    if analisis is None:
+        return ""
+    return analisis.observaciones.split(": solicitar")[0].strip().rstrip(".")
+
+
 def _nombre_de_tipo(catalogo, codigo):
     """La etiqueta del alias si tiene una (con qué documento se cumplió), o la del tipo."""
     return catalogo.etiqueta_de(codigo) or NOMBRE_DE_TIPO.get(codigo, codigo)
@@ -234,6 +241,9 @@ def detalle(request, pk):
                 "ia_valido": bool(e.analisis and e.analisis.es_valido),
                 "causas": [CAUSAS[c] for c in e.resultado_ia.causas],
                 "formato_sin_cedula": e.resultado_ia.formato_sin_cedula,
+                # No se envió a la IA (contraseña, dañado, límites): solo rechazar o descartar.
+                "ilegible": tipo_ia == Analisis.TIPO_ILEGIBLE,
+                "motivo_ilegible": _motivo_ilegible(e.analisis),
                 "por_vencer": e.resultado_ia.por_vencer
                 and bool(e.resultado)
                 and e.resultado.es_valido,

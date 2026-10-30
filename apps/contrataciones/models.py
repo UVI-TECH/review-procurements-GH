@@ -429,6 +429,16 @@ class Revision(ModeloInmutable):
                 errores["tipo_corregido"] = "El tipo está retirado del catálogo."
         elif self.tipo_corregido_id is not None:
             errores["tipo_corregido"] = "El tipo corregido solo aplica al corregir."
+        # Un ilegible no se envió a la IA y el revisor tampoco puede leerlo: solo se rechaza
+        # (pedir otro archivo) o se descarta (ADR 0006).
+        if (
+            self.decision in (self.Decision.APROBADO, self.Decision.CORREGIDO)
+            and self.analisis_id is not None
+            and self.analisis.tipo_detectado == Analisis.TIPO_ILEGIBLE
+        ):
+            errores["decision"] = (
+                "Un documento ilegible solo se puede rechazar o descartar: nadie puede leerlo."
+            )
         if errores:
             raise ValidationError(errores)
 
